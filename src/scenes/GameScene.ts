@@ -184,13 +184,15 @@ export class GameScene extends Phaser.Scene {
           .setDepth(13)
           .setScale(0)
         sprite.setData('crown', crown)
-        this.tweens.add({
+        // Handle stored so stopIdle can cancel it if the queen is tapped mid-pop.
+        const crownTween = this.tweens.add({
           targets: crown,
           scale: (this.cellSize / 62) * 0.9,
           delay: i * juice.spawn.staggerMs,
           duration: juice.spawn.popMs,
           ease: 'Back.easeOut',
         })
+        sprite.setData('crownTween', crownTween)
       }
 
       this.beeSprites.set(occ.id, sprite)
@@ -332,12 +334,14 @@ export class GameScene extends Phaser.Scene {
     if (cell.q !== pending.q || cell.r !== pending.r) return // released off the bee → cancel
 
     const occ = pending.occ
+    // Fetch the sprite BEFORE mutating state, so a (currently-unreachable)
+    // missing sprite can never silently consume a move and skip resolution.
+    const sprite = this.beeSprites.get(occ.id)
+    if (!sprite) return
     const outcome = this.board.tap(pending.q, pending.r)
     if (!outcome) return
 
     this.updateMovesHud()
-    const sprite = this.beeSprites.get(occ.id)
-    if (!sprite) return
     this.inputLocked = true
     this.stopIdle(sprite)
 
@@ -579,6 +583,15 @@ export class GameScene extends Phaser.Scene {
     if (spawnTimer) {
       spawnTimer.remove(false)
       sprite.setData('spawnTimer', undefined)
+    }
+    // A queen's crown pops in on its own tween; cancel it too and snap the crown
+    // to full size, else it could animate against a destroyed image after escape.
+    const crownTween = sprite.getData('crownTween') as Phaser.Tweens.Tween | undefined
+    if (crownTween) {
+      crownTween.remove()
+      sprite.setData('crownTween', undefined)
+      const crown = sprite.getData('crown') as Phaser.GameObjects.Image | undefined
+      crown?.setScale((this.cellSize / 62) * 0.9)
     }
     this.tweens.killTweensOf(sprite)
     sprite.setScale(this.beeScale)
