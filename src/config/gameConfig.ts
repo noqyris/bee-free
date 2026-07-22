@@ -2,37 +2,53 @@ export const GAME_WIDTH = 720
 export const GAME_HEIGHT = 1280
 
 export const colors = {
+  // Neutral fallbacks (per-chapter visuals come from config/theme.ts).
   background: 0x241a10,
-  backgroundDeep: 0x1a120b,
-  cellFill: 0xe8b04b,
-  cellStroke: 0x8f6a2a,
-  cellHighlight: 0xffffff,
+  backgroundDeep: 0x140d06,
+
+  // Bee sprite (constant across chapters so it always reads as "the bee").
   beeBody: 0xffd23f,
-  beeDark: 0x33241a,
-  beeWing: 0xcfe9ff,
+  beeDark: 0x2a1d12,
+  beeWing: 0xdcefff,
   arrow: 0xffffff,
-  hudText: 0xfff3d6,
+
+  // HUD / text
   hudTextCss: '#fff3d6',
   hudWarnCss: '#ff6b57',
-  panel: 0x3a2a1a,
-  panelStroke: 0x8f6a2a,
-  buttonPrimary: 0xffb020,
-  buttonSecondary: 0x6b5232,
-  buttonTextCss: '#2a1c0e',
-  buttonSecondaryTextCss: '#ffe9bd',
+
+  // Panels (modal cards) — neutral dark glass, accent stroke supplied per scene.
+  panel: 0x241d31,
+  panelDeep: 0x191324,
+  panelStroke: 0x4a4066,
+
+  // Buttons
+  buttonSecondary: 0x473f5e,
+  buttonTextCss: '#241708',
+  buttonSecondaryTextCss: '#efe9ff',
+
+  // Stars / rewards
   starGold: 0xffc94d,
-  starEmpty: 0x55432c,
+  starEmpty: 0x3b3550,
+  honey: 0xffc94d,
+  honeyCss: '#ffc94d',
+
+  // Particles
   honeyParticle: 0xffc94d,
-  dustParticle: 0xd8cbb8,
+  dustParticle: 0xe8dcc4,
+
+  // Overlays / locks
   dimBackdrop: 0x000000,
+  locked: 0x2c2740,
+  lockedStroke: 0x413a5c,
 } as const
 
 export const layout = {
-  hudTopY: 64,
-  movesPillY: 168,
-  boardTop: 260,
-  boardBottom: 1140,
-  boardPaddingX: 36,
-  maxCellSize: 64,
-  minCellSize: 16,
+  hudTopY: 88,
+  movesPillY: 176,
+  boardTop: 268,
+  boardBottom: 1150,
+  boardPaddingX: 40,
+  maxCellSize: 62,
+  minCellSize: 15,
+  safeTop: 44,
 } as const

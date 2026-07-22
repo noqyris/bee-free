@@ -55,6 +55,12 @@ export interface LevelData {
   readonly moveBudget: number
   /** Moves that must be left over (>=) on a win to earn 3 stars. */
   readonly threeStarSpare: number
+  /** 1-based chapter (every 25 levels); set by the generator. */
+  readonly chapter?: number
+  /** Composite difficulty score from the solver (for tuning/telemetry). */
+  readonly difficulty?: number
+  /** Longest forced ordering chain from the solver. */
+  readonly depDepth?: number
 }
 
 export type TapOutcome =

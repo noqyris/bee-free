@@ -8,12 +8,16 @@ import {
   neighborDistance,
   unitCenterBounds,
 } from '../systems/HexGrid'
-import { TEST_LEVELS } from '../levels'
+import { getLevel, LEVEL_COUNT, chapterOf } from '../levels'
 import type { Axial, CellOccupant, LevelData, TapOutcome } from '../types'
 import { GAME_WIDTH, colors, layout } from '../config/gameConfig'
 import { juice } from '../config/juiceConfig'
+import { themeForChapter, type ChapterTheme } from '../config/theme'
+import { paintBackground } from '../utils/background'
+import { difficultyDirector } from '../systems/DifficultyDirector'
+import { saveManager } from '../systems/SaveManager'
 import { t } from '../i18n'
-import { makeButton, FONT_STACK } from '../utils/ui'
+import { makeIconButton, FONT_STACK } from '../utils/ui'
 
 interface GameSceneData {
   levelIndex?: number
@@ -25,6 +29,7 @@ type BlockedOutcome = Extract<TapOutcome, { kind: 'blocked' }>
 export class GameScene extends Phaser.Scene {
   private board!: BoardState
   private level!: LevelData
+  private theme!: ChapterTheme
   private levelIndex = 0
   private cellSize = 48
   private beeScale = 0.6
@@ -42,18 +47,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   init(data: GameSceneData): void {
-    this.levelIndex = Phaser.Math.Clamp(data.levelIndex ?? 0, 0, TEST_LEVELS.length - 1)
+    this.levelIndex = Phaser.Math.Clamp(data.levelIndex ?? 0, 0, LEVEL_COUNT - 1)
   }
 
   create(): void {
-    this.level = TEST_LEVELS[this.levelIndex]
-    this.board = new BoardState(this.level)
+    this.level = getLevel(this.levelIndex)
+    this.theme = themeForChapter(chapterOf(this.level.id))
+    // Silent difficulty easing: bonus moves after a fail streak (spec §4).
+    const bonus = difficultyDirector.bonusMovesFor(this.level.id)
+    this.board = new BoardState({ ...this.level, moveBudget: this.level.moveBudget + bonus })
     this.beeSprites.clear()
     this.inputLocked = false
     this.comboCount = 0
     this.lastEscapeAt = -Infinity
 
-    this.cameras.main.setBackgroundColor(colors.background)
+    paintBackground(this, this.theme)
     this.layoutBoard()
     this.drawCells()
     this.createEmitters()
@@ -91,9 +99,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawCells(): void {
+    const s = this.cellSize / 62
     for (const [q, r] of this.level.cells) {
       const { x, y } = this.cellToWorld(q, r)
-      this.add.image(x, y, 'cell').setScale(this.cellSize / 60)
+      // Themed cell: stroke-colored border hex behind a slightly smaller fill.
+      this.add.image(x, y + s * 4, 'hex').setScale(s).setTint(0x000000).setAlpha(0.18)
+      this.add.image(x, y, 'hex').setScale(s).setTint(this.theme.cellStroke)
+      this.add.image(x, y, 'hex').setScale(s * 0.88).setTint(this.theme.cellFill)
+      this.add.image(x, y - s * 6, 'hex').setScale(s * 0.6).setTint(0xffffff).setAlpha(0.08)
     }
   }
 
@@ -156,54 +169,55 @@ export class GameScene extends Phaser.Scene {
     this.add
       .text(GAME_WIDTH / 2, layout.hudTopY, t('hud.level', { n: this.level.id }), {
         fontFamily: FONT_STACK,
-        fontSize: '40px',
-        color: colors.hudTextCss,
+        fontSize: '42px',
+        color: this.theme.textCss,
+        stroke: '#000000',
+        strokeThickness: 4,
       })
       .setOrigin(0.5)
       .setDepth(200)
 
+    // Moves pill with an accent ring.
     const pill = this.add.graphics().setDepth(200)
-    pill.fillStyle(0x000000, 0.3)
-    pill.fillRoundedRect(GAME_WIDTH / 2 - 110, layout.movesPillY - 46, 220, 92, 26)
+    pill.fillStyle(0x000000, 0.34)
+    pill.fillRoundedRect(GAME_WIDTH / 2 - 116, layout.movesPillY - 48, 232, 96, 30)
+    pill.lineStyle(3, this.theme.accent, 0.8)
+    pill.strokeRoundedRect(GAME_WIDTH / 2 - 116, layout.movesPillY - 48, 232, 96, 30)
 
     this.add
-      .text(GAME_WIDTH / 2, layout.movesPillY + 24, t('hud.moves'), {
+      .text(GAME_WIDTH / 2, layout.movesPillY + 26, t('hud.moves'), {
         fontFamily: FONT_STACK,
         fontSize: '20px',
-        color: colors.hudTextCss,
+        color: this.theme.textCss,
       })
       .setOrigin(0.5)
       .setDepth(200)
-      .setAlpha(0.7)
+      .setAlpha(0.65)
 
     this.movesText = this.add
       .text(GAME_WIDTH / 2, layout.movesPillY - 8, String(this.board.movesLeft), {
         fontFamily: FONT_STACK,
-        fontSize: '54px',
-        color: colors.hudTextCss,
+        fontSize: '56px',
+        color: this.theme.textCss,
       })
       .setOrigin(0.5)
       .setDepth(200)
 
-    makeButton(this, 72, layout.hudTopY, '‹', () => this.scene.start('Menu'), {
-      width: 84,
-      height: 68,
-      fontSize: 44,
-      primary: false,
-    }).setDepth(200)
-
-    makeButton(this, GAME_WIDTH - 72, layout.hudTopY, '↻', () => this.scene.restart({ levelIndex: this.levelIndex }), {
-      width: 84,
-      height: 68,
-      fontSize: 40,
-      primary: false,
-    }).setDepth(200)
+    makeIconButton(this, 66, layout.hudTopY, '‹', () => this.scene.start('Menu'), 34).setDepth(200)
+    makeIconButton(
+      this,
+      GAME_WIDTH - 66,
+      layout.hudTopY,
+      '↻',
+      () => this.scene.restart({ levelIndex: this.levelIndex }),
+      34,
+    ).setDepth(200)
   }
 
   private updateMovesHud(): void {
     this.movesText.setText(String(this.board.movesLeft))
     const doomed = this.board.status === 'playing' && this.board.movesLeft < this.board.remaining
-    this.movesText.setColor(doomed ? colors.hudWarnCss : colors.hudTextCss)
+    this.movesText.setColor(doomed ? colors.hudWarnCss : this.theme.textCss)
     this.movesText.setScale(1)
     this.tweens.add({
       targets: this.movesText,
@@ -430,22 +444,30 @@ export class GameScene extends Phaser.Scene {
     this.inputLocked = false
     const status = this.board.status
     if (status === 'won') {
+      // 3 stars require finishing with the level's spare margin left; else 2.
+      // (1 star is reserved for the rewarded +3-moves revive, wired in M5.)
       const stars = this.board.movesLeft >= this.level.threeStarSpare ? 3 : 2
+      difficultyDirector.recordWin(this.level.id)
+      const honey = saveManager.recordWin(this.level.id, stars, LEVEL_COUNT)
       this.inputLocked = true
       this.time.delayedCall(juice.ui.resultDelayWinMs, () => {
         this.scene.launch('LevelComplete', {
           levelIndex: this.levelIndex,
+          chapter: chapterOf(this.level.id),
           stars,
+          honey,
           movesUsed: this.board.movesUsed,
           budget: this.board.moveBudget,
         })
         this.scene.pause()
       })
     } else if (status === 'lost') {
+      difficultyDirector.recordFail(this.level.id)
       this.inputLocked = true
       this.time.delayedCall(juice.ui.resultDelayLoseMs, () => {
         this.scene.launch('LevelFailed', {
           levelIndex: this.levelIndex,
+          chapter: chapterOf(this.level.id),
           beesLeft: this.board.remaining,
         })
         this.scene.pause()

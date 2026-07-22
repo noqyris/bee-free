@@ -1,13 +1,16 @@
 import Phaser from 'phaser'
 import { GAME_WIDTH, GAME_HEIGHT, colors } from '../config/gameConfig'
 import { juice } from '../config/juiceConfig'
-import { TEST_LEVELS } from '../levels'
+import { LEVEL_COUNT } from '../levels'
+import { themeForChapter } from '../config/theme'
 import { t } from '../i18n'
 import { makeButton, FONT_STACK } from '../utils/ui'
 
 interface LevelCompleteData {
   levelIndex: number
+  chapter: number
   stars: number
+  honey: number
   movesUsed: number
   budget: number
 }
@@ -24,6 +27,8 @@ export class LevelCompleteScene extends Phaser.Scene {
   }
 
   create(): void {
+    const theme = themeForChapter(this.params.chapter)
+
     const backdrop = this.add
       .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, colors.dimBackdrop, 1)
       .setAlpha(0)
@@ -33,32 +38,36 @@ export class LevelCompleteScene extends Phaser.Scene {
     const panel = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 60).setAlpha(0)
 
     const g = this.add.graphics()
+    g.fillStyle(colors.panelDeep, 1)
+    g.fillRoundedRect(-284, -324, 568, 648, 40)
     g.fillStyle(colors.panel, 1)
     g.fillRoundedRect(-280, -320, 560, 640, 36)
-    g.lineStyle(5, colors.panelStroke, 1)
+    g.lineStyle(4, theme.accent, 0.9)
     g.strokeRoundedRect(-280, -320, 560, 640, 36)
     panel.add(g)
 
     panel.add(
       this.add
-        .text(0, -230, t('result.win'), {
+        .text(0, -238, t('result.win'), {
           fontFamily: FONT_STACK,
-          fontSize: '56px',
-          color: '#ffd23f',
-          stroke: '#33241a',
-          strokeThickness: 8,
+          fontSize: '58px',
+          color: theme.accentCss,
+          stroke: '#000000',
+          strokeThickness: 6,
         })
         .setOrigin(0.5),
     )
 
-    // Star slots, then earned stars slam in one by one
-    const starXs = [-130, 0, 130]
-    starXs.forEach((x) => {
-      panel.add(this.add.star(x, -90, 5, 24, 50, colors.starEmpty).setOrigin(0.5))
+    // Star slots, then earned stars slam in one by one.
+    const starXs = [-132, 0, 132]
+    const starY = -110
+    starXs.forEach((x, i) => {
+      panel.add(this.add.star(x, starY + (i === 1 ? -14 : 0), 5, 26, 54, colors.starEmpty).setOrigin(0.5))
     })
     for (let i = 0; i < this.params.stars; i++) {
+      const yBase = starY + (i === 1 ? -14 : 0)
       const star = this.add
-        .star(starXs[i], -90, 5, 24, 50, colors.starGold)
+        .star(starXs[i], yBase, 5, 26, 54, colors.starGold)
         .setOrigin(0.5)
         .setScale(3)
         .setAlpha(0)
@@ -78,27 +87,43 @@ export class LevelCompleteScene extends Phaser.Scene {
 
     panel.add(
       this.add
-        .text(0, 10, t('result.movesUsed', { used: this.params.movesUsed, budget: this.params.budget }), {
+        .text(0, -6, t('result.movesUsed', { used: this.params.movesUsed, budget: this.params.budget }), {
           fontFamily: FONT_STACK,
-          fontSize: '28px',
+          fontSize: '26px',
           color: colors.hudTextCss,
         })
-        .setOrigin(0.5),
+        .setOrigin(0.5)
+        .setAlpha(0.85),
     )
 
-    const hasNext = this.params.levelIndex < TEST_LEVELS.length - 1
-    const nextBtn = makeButton(
-      this,
-      0,
-      120,
-      hasNext ? t('result.next') : t('result.menu'),
-      () => (hasNext ? this.goToLevel(this.params.levelIndex + 1) : this.goMenu()),
-      { width: 400, height: 92, fontSize: 36 },
+    // Honey reward line
+    const honey = this.add.container(0, 48)
+    honey.add(this.add.star(-38, 0, 5, 10, 20, colors.honey).setOrigin(0.5))
+    honey.add(
+      this.add
+        .text(-14, 0, t('result.honey', { n: this.params.honey }), {
+          fontFamily: FONT_STACK,
+          fontSize: '32px',
+          color: colors.honeyCss,
+        })
+        .setOrigin(0, 0.5),
     )
-    panel.add(nextBtn)
+    panel.add(honey)
+
+    const hasNext = this.params.levelIndex < LEVEL_COUNT - 1
+    panel.add(
+      makeButton(
+        this,
+        0,
+        140,
+        hasNext ? t('result.next') : t('result.menu'),
+        () => (hasNext ? this.goToLevel(this.params.levelIndex + 1) : this.goMenu()),
+        { width: 400, height: 92, fontSize: 36, accent: theme.accent },
+      ),
+    )
 
     panel.add(
-      makeButton(this, -110, 235, t('result.replay'), () => this.goToLevel(this.params.levelIndex), {
+      makeButton(this, -110, 250, t('result.replay'), () => this.goToLevel(this.params.levelIndex), {
         width: 200,
         height: 72,
         fontSize: 26,
@@ -106,7 +131,7 @@ export class LevelCompleteScene extends Phaser.Scene {
       }),
     )
     panel.add(
-      makeButton(this, 110, 235, t('result.menu'), () => this.goMenu(), {
+      makeButton(this, 110, 250, t('result.menu'), () => this.goMenu(), {
         width: 200,
         height: 72,
         fontSize: 26,

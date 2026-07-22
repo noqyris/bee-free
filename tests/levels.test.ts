@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BoardState } from '../src/systems/BoardState'
-import { TEST_LEVELS } from '../src/levels'
+import { HAND_LEVELS } from '../src/levels/handLevels'
 
 /**
  * Bump-free BFS over remaining-bee subsets: returns the minimum number of
@@ -34,11 +34,11 @@ function minSolution(board: BoardState): number | null {
 
 describe('hand-made M1 levels', () => {
   it('ships exactly 5 test levels with unique ids', () => {
-    expect(TEST_LEVELS).toHaveLength(5)
-    expect(new Set(TEST_LEVELS.map((l) => l.id)).size).toBe(5)
+    expect(HAND_LEVELS).toHaveLength(5)
+    expect(new Set(HAND_LEVELS.map((l) => l.id)).size).toBe(5)
   })
 
-  for (const level of TEST_LEVELS) {
+  for (const level of HAND_LEVELS) {
     describe(`level ${level.id} (${level.name ?? 'unnamed'})`, () => {
       it('constructs a valid board', () => {
         expect(() => new BoardState(level)).not.toThrow()
@@ -61,7 +61,7 @@ describe('hand-made M1 levels', () => {
   }
 
   it('level 2 punishes the wrong order with a bump (core tension)', () => {
-    const board = new BoardState(TEST_LEVELS[1])
+    const board = new BoardState(HAND_LEVELS[1])
     expect(board.tap(-1, 0)?.kind).toBe('blocked')
     expect(board.tap(1, 0)?.kind).toBe('escaped')
     expect(board.tap(-1, 0)?.kind).toBe('escaped')

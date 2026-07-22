@@ -1,11 +1,13 @@
 import Phaser from 'phaser'
 import { GAME_WIDTH, GAME_HEIGHT, colors } from '../config/gameConfig'
 import { juice } from '../config/juiceConfig'
+import { themeForChapter } from '../config/theme'
 import { t, tp } from '../i18n'
 import { makeButton, FONT_STACK } from '../utils/ui'
 
 interface LevelFailedData {
   levelIndex: number
+  chapter: number
   beesLeft: number
 }
 
@@ -21,6 +23,8 @@ export class LevelFailedScene extends Phaser.Scene {
   }
 
   create(): void {
+    const theme = themeForChapter(this.params.chapter)
+
     const backdrop = this.add
       .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, colors.dimBackdrop, 1)
       .setAlpha(0)
@@ -30,25 +34,27 @@ export class LevelFailedScene extends Phaser.Scene {
     const panel = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 60).setAlpha(0)
 
     const g = this.add.graphics()
+    g.fillStyle(colors.panelDeep, 1)
+    g.fillRoundedRect(-284, -264, 568, 528, 40)
     g.fillStyle(colors.panel, 1)
     g.fillRoundedRect(-280, -260, 560, 520, 36)
-    g.lineStyle(5, colors.panelStroke, 1)
+    g.lineStyle(4, theme.accent, 0.7)
     g.strokeRoundedRect(-280, -260, 560, 520, 36)
     panel.add(g)
 
     panel.add(
       this.add
-        .text(0, -170, t('result.lose'), {
+        .text(0, -172, t('result.lose'), {
           fontFamily: FONT_STACK,
           fontSize: '52px',
           color: '#ff8b57',
-          stroke: '#33241a',
-          strokeThickness: 8,
+          stroke: '#000000',
+          strokeThickness: 6,
         })
         .setOrigin(0.5),
     )
 
-    const bee = this.add.sprite(0, -55, 'bee').setScale(1.1).setRotation(0.5)
+    const bee = this.add.sprite(0, -52, 'bee').setScale(1.15).setRotation(0.5)
     panel.add(bee)
     this.tweens.add({
       targets: bee,
@@ -61,23 +67,25 @@ export class LevelFailedScene extends Phaser.Scene {
 
     panel.add(
       this.add
-        .text(0, 40, tp('result.beesLeft', this.params.beesLeft), {
+        .text(0, 44, tp('result.beesLeft', this.params.beesLeft), {
           fontFamily: FONT_STACK,
           fontSize: '28px',
           color: colors.hudTextCss,
         })
-        .setOrigin(0.5),
+        .setOrigin(0.5)
+        .setAlpha(0.85),
     )
 
     panel.add(
-      makeButton(this, 0, 130, t('result.retry'), () => this.goToLevel(this.params.levelIndex), {
+      makeButton(this, 0, 132, t('result.retry'), () => this.goToLevel(this.params.levelIndex), {
         width: 400,
         height: 92,
         fontSize: 36,
+        accent: theme.accent,
       }),
     )
     panel.add(
-      makeButton(this, 0, 220, t('result.menu'), () => this.goMenu(), {
+      makeButton(this, 0, 222, t('result.menu'), () => this.goMenu(), {
         width: 240,
         height: 68,
         fontSize: 26,

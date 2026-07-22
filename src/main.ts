@@ -7,7 +7,7 @@ import { GameScene } from './scenes/GameScene'
 import { LevelCompleteScene } from './scenes/LevelCompleteScene'
 import { LevelFailedScene } from './scenes/LevelFailedScene'
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'app',
   backgroundColor: colors.backgroundDeep,
@@ -19,3 +19,8 @@ new Phaser.Game({
   },
   scene: [BootScene, PreloadScene, MenuScene, GameScene, LevelCompleteScene, LevelFailedScene],
 })
+
+// Dev-only hook for automated QA (screenshot harness reads the active scene).
+if (import.meta.env.DEV) {
+  ;(globalThis as unknown as { __game: Phaser.Game }).__game = game
+}

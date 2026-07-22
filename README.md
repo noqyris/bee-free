@@ -7,22 +7,42 @@ still spent.
 
 ## Status
 
-- [x] **M1 — Core loop**: hex grid, tap-to-fly, block/bump, win/lose, move counter + stars, 5 hand-made test levels, programmatic placeholder art, solver-backed level tests
-- [ ] M2 — Level pipeline (generator + solver + 150 levels + DifficultyDirector)
-- [ ] M3 — Game feel (full juice pass, AudioManager, haptics)
-- [ ] M4 — Meta (honey, skins, collection, daily challenge, progress map)
+- [x] **M1 — Core loop**: hex grid, tap-to-fly, block/bump, win/lose, move counter + stars, programmatic placeholder art, solver-backed level tests
+- [x] **M2 — Level pipeline**: reverse generator + solver/validator + 150 shipped levels (`levels.generated.json`), difficulty curve (6 chapters, saw-tooth), DifficultyDirector, chapter-paged level-select map, chapter theming, local save
+- [ ] M3 — Game feel (audio manager + more juice, haptics)
+- [ ] M4 — Meta (skins/collection, daily challenge; honey + progress map done)
 - [ ] M5 — Monetization (AdMob UMP/ATT, rewarded + interstitial, RevenueCat)
 - [ ] M6 — Ship prep (Capacitor iOS, icons/splash, App Store checklist)
+
+Partial: honey currency, a progress/level map, and per-chapter theming already exist (built alongside M2). Obstacle types (honey/wax/queen/hornet) are intentionally deferred — the current 150 levels use the pure-bee mechanic, with generator/solver/`CellOccupant` hooks ready for them.
 
 ## Development
 
 ```bash
 npm install
-npm run dev        # play in browser (portrait viewport recommended)
-npm test           # unit tests incl. solver validation of all levels
-npm run typecheck  # strict TS
-npm run build      # production bundle (relative base, Capacitor-ready)
+npm run dev         # play in browser (portrait viewport recommended)
+npm run gen:levels  # regenerate the 150 levels → src/levels/levels.generated.json
+npm test            # unit tests incl. bump-free solvability of all 150 levels
+npm run typecheck   # strict TS
+npm run build       # production bundle (relative base, Capacitor-ready)
 ```
+
+## Level generation (M2)
+
+Levels are generated **offline** and shipped as static JSON — never generated at
+runtime. `npm run gen:levels` builds all 150 from the difficulty curve
+(`src/config/levelCurve.ts`) using solvability-guaranteed **reverse generation**
+(`src/systems/LevelGenerator.ts`): the last-to-escape bee is placed first on an
+empty board, and each earlier bee is placed so its straight path is clear of
+every already-placed bee — so escaping in reverse-placement order is always a
+valid, bump-free solution. `src/systems/Solver.ts` validates each board and
+scores difficulty (dependency-chain depth, blocked-at-start count, fill,
+bee count). The test suite re-verifies every level is solvable within budget, so
+CI fails if a bad level ever ships.
+
+Difficulty is 6 chapters × 25 levels with a saw-tooth ramp (a spike every 10th
+level, a breather after), tightening move budgets and 3-star thresholds. The
+runtime `DifficultyDirector` silently grants +2 moves after 3 consecutive fails.
 
 ## Architecture notes
 
