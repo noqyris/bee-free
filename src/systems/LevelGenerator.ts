@@ -1,7 +1,10 @@
 import { axialKey, DIRECTION_VECTORS } from './HexGrid'
 import { analyzeBoard, type BoardMetrics, type SolverBee } from './Solver'
+import { BoardState } from './BoardState'
+import { searchMinMoves } from './SolverSearch'
 import { makeRng, mixSeed, weightedPick, type Rng } from '../utils/rng'
 import type { Cell } from './boardShapes'
+import type { BeeSpec } from '../types'
 
 /**
  * Solvability-guaranteed reverse generation (spec §4), with obstacles.
@@ -23,6 +26,9 @@ export interface GenOccupant extends SolverBee {}
 
 export interface GenBoard {
   occupants: GenOccupant[]
+  honeyCells: Array<[number, number]>
+  /** Minimum taps to clear all goals (accounts for honey detours). */
+  minMoves: number
   metrics: BoardMetrics
 }
 
@@ -109,6 +115,81 @@ export interface GenRequest {
   attempts: number
   hornets: number
   hasQueen: boolean
+  honey: number
+}
+
+/** Empty board cells a bee would pass over before it exits or is blocked. */
+function beeRayEmptyCells(
+  bee: GenOccupant,
+  boardSet: ReadonlySet<string>,
+  occSet: ReadonlySet<string>,
+): string[] {
+  const v = DIRECTION_VECTORS[bee.dir]
+  let q = bee.q
+  let r = bee.r
+  const out: string[] = []
+  for (;;) {
+    q += v.q
+    r += v.r
+    const k = axialKey(q, r)
+    if (!boardSet.has(k) || occSet.has(k)) break
+    out.push(k)
+  }
+  return out
+}
+
+/**
+ * Try to place `honeyCount` honey cells on bee rays such that the board stays
+ * solvable (verified by full search). Prefers placements that actually add taps
+ * (a bee getting stuck), i.e. that make the puzzle deeper. Returns null if no
+ * solvable placement is found.
+ */
+function addHoney(
+  occupants: GenOccupant[],
+  boardCells: ReadonlyArray<Cell>,
+  boardSet: ReadonlySet<string>,
+  honeyCount: number,
+  seed: number,
+): { cells: Array<[number, number]>; minMoves: number } | null {
+  const occSet = new Set(occupants.map((o) => axialKey(o.q, o.r)))
+  const goals = occupants.filter((o) => o.kind !== 'hornet').length
+  const candSet = new Set<string>()
+  for (const o of occupants) {
+    if (o.kind === 'hornet') continue
+    for (const k of beeRayEmptyCells(o, boardSet, occSet)) candSet.add(k)
+  }
+  const candidates = [...candSet]
+  if (candidates.length < honeyCount) return null
+
+  const cellsList = boardCells.map((c) => [c[0], c[1]] as [number, number])
+  const beeSpecs: BeeSpec[] = occupants.map((o) => ({ q: o.q, r: o.r, dir: o.dir, kind: o.kind }))
+  const rng = makeRng(mixSeed(seed, 0x0f0f0f))
+  const searchMax = goals * 2 + 8
+  let fallback: { cells: Array<[number, number]>; minMoves: number } | null = null
+
+  for (let t = 0; t < 40; t++) {
+    const pool = [...candidates]
+    const chosen: Array<[number, number]> = []
+    for (let i = 0; i < honeyCount && pool.length > 0; i++) {
+      const idx = Math.floor(rng() * pool.length)
+      const [k] = pool.splice(idx, 1)
+      const [q, r] = k.split(',').map(Number)
+      chosen.push([q, r])
+    }
+    const board = new BoardState({
+      id: 0,
+      cells: cellsList,
+      honeyCells: chosen,
+      bees: beeSpecs,
+      moveBudget: 999,
+      threeStarSpare: 0,
+    })
+    const m = searchMinMoves(board, searchMax)
+    if (m === null) continue
+    if (m > goals) return { cells: chosen, minMoves: m } // honey actually triggered → keep
+    if (!fallback) fallback = { cells: chosen, minMoves: m }
+  }
+  return fallback
 }
 
 export function generateLevel(req: GenRequest): GenBoard {
@@ -144,7 +225,7 @@ export function generateLevel(req: GenRequest): GenBoard {
       beeShort * 50 + (inBand ? 0 : 20) + Math.abs(metrics.depDepth - depthMid) + queenMissing + hornetShort
 
     if (score < bestScore) {
-      best = { occupants, metrics }
+      best = { occupants, metrics, honeyCells: [], minMoves: metrics.beeCount }
       bestScore = score
       if (inBand && beeShort === 0 && queenMissing === 0 && hornetShort === 0) break
     }
@@ -153,7 +234,17 @@ export function generateLevel(req: GenRequest): GenBoard {
   if (!best) {
     const rng = makeRng(req.seed)
     const bees = placeBees(req.boardCells, boardSet, new Set(), req.targetBees, req.rayBias, rng)
-    best = { occupants: bees, metrics: analyzeBoard(bees, boardSet, boardCells) }
+    const metrics = analyzeBoard(bees, boardSet, boardCells)
+    best = { occupants: bees, metrics, honeyCells: [], minMoves: metrics.beeCount }
+  }
+
+  // Honey (validated by full search — it breaks greedy monotonicity).
+  if (req.honey > 0) {
+    const added = addHoney(best.occupants, req.boardCells, boardSet, req.honey, req.seed)
+    if (added) {
+      best.honeyCells = added.cells
+      best.minMoves = added.minMoves
+    }
   }
   return best
 }

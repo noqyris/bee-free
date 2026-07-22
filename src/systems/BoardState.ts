@@ -11,6 +11,7 @@ export class BoardState {
   movesUsed = 0
 
   private cellSet = new Set<string>()
+  private honeySet = new Set<string>()
   private budget = 0
   private occupants = new Map<string, CellOccupant>()
   private queenViolated = false
@@ -18,6 +19,7 @@ export class BoardState {
   constructor(level?: LevelData) {
     if (!level) return
     for (const [q, r] of level.cells) this.cellSet.add(axialKey(q, r))
+    for (const [q, r] of level.honeyCells ?? []) this.honeySet.add(axialKey(q, r))
     this.budget = level.moveBudget
 
     let nextId = 1
@@ -35,6 +37,10 @@ export class BoardState {
 
   get cells(): ReadonlySet<string> {
     return this.cellSet
+  }
+
+  get honey(): ReadonlySet<string> {
+    return this.honeySet
   }
 
   get moveBudget(): number {
@@ -91,6 +97,9 @@ export class BoardState {
       if (!this.cellSet.has(key)) return { kind: 'escaped', path }
       const blocker = this.occupants.get(key)
       if (blocker?.blocksFlight()) return { kind: 'blocked', path, blocker: pos }
+      // An empty honey cell catches the bee (its own start cell is never re-checked
+      // since we step first, so a bee already on honey flies off it normally).
+      if (this.honeySet.has(key)) return { kind: 'stuck', path, at: { q: pos.q, r: pos.r } }
       path.push(pos)
     }
   }
@@ -111,6 +120,12 @@ export class BoardState {
       this.occupants.delete(axialKey(q, r))
       // Queen must be last: if she leaves with any goal still on the board, lose.
       if (occ.kind === 'queen' && this.goalRemaining > 0) this.queenViolated = true
+    } else if (outcome.kind === 'stuck') {
+      // Relocate the occupant onto the honey cell; it stays as a blocker.
+      this.occupants.delete(axialKey(q, r))
+      occ.q = outcome.at.q
+      occ.r = outcome.at.r
+      this.occupants.set(axialKey(occ.q, occ.r), occ)
     }
     return outcome
   }
@@ -124,6 +139,7 @@ export class BoardState {
   clone(): BoardState {
     const copy = new BoardState()
     copy.cellSet = this.cellSet
+    copy.honeySet = this.honeySet
     copy.budget = this.budget
     copy.movesUsed = this.movesUsed
     copy.queenViolated = this.queenViolated

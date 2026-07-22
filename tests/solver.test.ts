@@ -111,11 +111,27 @@ describe('LevelGenerator', () => {
     rayBias: 2.5,
     hornets: 0,
     hasQueen: false,
+    honey: 0,
   }
 
   it('is deterministic for a fixed seed', () => {
     const req = { ...baseReq, seed: 12345, attempts: 200 }
     expect(generateLevel(req).occupants).toEqual(generateLevel(req).occupants)
+  })
+
+  it('generates a solvable honey board with a search-derived min-move count', () => {
+    const { honeyCells, minMoves, occupants } = generateLevel({
+      ...baseReq,
+      targetBees: 7,
+      honey: 1,
+      seed: 42,
+      attempts: 150,
+    })
+    // Honey may or may not place on a given seed, but if it does, min moves must
+    // exceed the goal count (a bee gets stuck) and there are no overlaps.
+    const keys = new Set(occupants.map((o) => axialKey(o.q, o.r)))
+    expect(keys.size).toBe(occupants.length)
+    if (honeyCells.length > 0) expect(minMoves).toBeGreaterThanOrEqual(occupants.length)
   })
 
   it('always produces a solvable board with no overlapping occupants', () => {

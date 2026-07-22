@@ -26,6 +26,7 @@ interface OutLevel {
   chapter: number
   shape: string
   cells: Array<[number, number]>
+  honeyCells: Array<[number, number]>
   bees: OutBee[]
   moveBudget: number
   threeStarSpare: number
@@ -33,6 +34,7 @@ interface OutLevel {
   depDepth: number
   hornets: number
   hasQueen: boolean
+  minMoves: number
 }
 
 const slots = buildLevelCurve()
@@ -41,7 +43,7 @@ const failures: string[] = []
 
 for (const slot of slots) {
   const cells = shapeCells(slot.shape)
-  const { occupants, metrics } = generateLevel({
+  const { occupants, honeyCells, minMoves, metrics } = generateLevel({
     boardCells: cells,
     targetBees: slot.targetBees,
     minDepth: slot.minDepth,
@@ -49,32 +51,38 @@ for (const slot of slots) {
     rayBias: slot.rayBias,
     hasQueen: slot.hasQueen,
     hornets: slot.hornets,
+    honey: slot.honey,
     seed: slot.seed,
     attempts: slot.attempts,
   })
 
-  // metrics.beeCount = goal occupants (bees + queen); the budget is over goals.
+  // metrics.beeCount = goal occupants (bees + queen). minMoves accounts for
+  // honey detours (== goals when there is no honey); the budget is over minMoves.
   const goals = metrics.beeCount
-  const moveBudget = goals + slot.slack
+  const moveBudget = minMoves + slot.slack
   if (!metrics.solvable) failures.push(`L${slot.id}: NOT solvable`)
   if (goals < 2) failures.push(`L${slot.id}: only ${goals} goal occupants`)
-  if (moveBudget < goals) failures.push(`L${slot.id}: budget < goals`)
-  if (slot.threeStarSpare > moveBudget - goals)
+  if (moveBudget < minMoves) failures.push(`L${slot.id}: budget < minMoves`)
+  if (slot.threeStarSpare > moveBudget - minMoves)
     failures.push(`L${slot.id}: 3-star spare unreachable`)
   if (slot.hasQueen && !metrics.hasQueen) failures.push(`L${slot.id}: queen requested but absent`)
+  if (slot.honey > 0 && honeyCells.length === 0)
+    failures.push(`L${slot.id}: honey requested but none placed solvably`)
 
   levels.push({
     id: slot.id,
     chapter: slot.chapter,
     shape: shapeLabel(slot.shape),
     cells: cells.map(([q, r]) => [q, r] as [number, number]),
+    honeyCells,
     bees: occupants.map((b) => ({ q: b.q, r: b.r, dir: b.dir, kind: b.kind })),
     moveBudget,
-    threeStarSpare: Math.min(slot.threeStarSpare, moveBudget - goals),
+    threeStarSpare: Math.min(slot.threeStarSpare, moveBudget - minMoves),
     difficulty: Math.round(metrics.difficulty * 10) / 10,
     depDepth: metrics.depDepth,
     hornets: metrics.hornets,
     hasQueen: metrics.hasQueen,
+    minMoves,
   })
 }
 
@@ -88,8 +96,8 @@ writeFileSync(OUT, JSON.stringify({ schema: 1, count: levels.length, levels }, n
 
 // Summary per chapter for a human sanity check.
 console.log(`\nGenerated ${levels.length} levels → ${OUT}\n`)
-console.log('Chapter | goals(min–max) | depth(min–max) | queens | hornets | difficulty(avg)')
-console.log('--------|----------------|----------------|--------|---------|----------------')
+console.log('Chapter | goals(min–max) | depth(min–max) | queens | hornets | honey | difficulty(avg)')
+console.log('--------|----------------|----------------|--------|---------|-------|----------------')
 for (let ch = 1; ch <= 6; ch++) {
   const g = levels.filter((l) => l.chapter === ch)
   const goalsOf = (l: OutLevel) => l.bees.filter((b) => b.kind !== 'hornet').length
@@ -98,10 +106,11 @@ for (let ch = 1; ch <= 6; ch++) {
   const diff = g.map((l) => l.difficulty)
   const queens = g.filter((l) => l.hasQueen).length
   const hornets = g.reduce((a, l) => a + l.hornets, 0)
+  const honeyLvls = g.filter((l) => l.honeyCells.length > 0).length
   const rng = (a: number[]) => `${Math.min(...a)}–${Math.max(...a)}`
   const avg = (a: number[]) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1)
   console.log(
-    `   ${ch}    |    ${rng(goals).padEnd(11)}| ${rng(depth).padEnd(15)}|   ${String(queens).padEnd(5)}|   ${String(hornets).padEnd(6)}| ${avg(diff)}`,
+    `   ${ch}    |    ${rng(goals).padEnd(11)}| ${rng(depth).padEnd(15)}|   ${String(queens).padEnd(5)}|   ${String(hornets).padEnd(6)}| ${String(honeyLvls).padEnd(6)}| ${avg(diff)}`,
   )
 }
 console.log('')

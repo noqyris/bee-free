@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { BoardState } from '../src/systems/BoardState'
+import { searchMinMoves } from '../src/systems/SolverSearch'
 import { LEVELS, LEVEL_COUNT, chapterOf } from '../src/levels'
 import { axialKey } from '../src/systems/HexGrid'
+
+const hasHoney = (l: (typeof LEVELS)[number]): boolean => (l.honeyCells?.length ?? 0) > 0
 
 /**
  * Independent verifier (does NOT use src/systems/Solver): greedily escape any
@@ -63,11 +66,20 @@ describe('generated level set', () => {
         }
       })
 
-      it('is solvable bump-free within budget (min moves = goal count)', () => {
-        const goals = goalCount(level)
-        const moves = greedyClear(new BoardState(level))
-        expect(moves).toBe(goals)
-        expect(level.moveBudget).toBeGreaterThanOrEqual(goals)
+      it('is solvable within budget', () => {
+        if (hasHoney(level)) {
+          // Honey breaks monotonicity → verify by full search (unbounded budget
+          // board, capped at the level's move budget).
+          const board = new BoardState({ ...level, moveBudget: 999 })
+          const min = searchMinMoves(board, level.moveBudget)
+          expect(min).not.toBeNull()
+          expect(min as number).toBeLessThanOrEqual(level.moveBudget)
+        } else {
+          const goals = goalCount(level)
+          const moves = greedyClear(new BoardState(level))
+          expect(moves).toBe(goals)
+          expect(level.moveBudget).toBeGreaterThanOrEqual(goals)
+        }
       })
 
       it('has a coherent, non-degenerate budget', () => {

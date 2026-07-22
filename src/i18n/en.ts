@@ -15,6 +15,7 @@ export const en = {
   'coach.blocked': 'Red means blocked — it will bump and waste a move',
   'coach.queen': 'The rose Queen must leave LAST — clear the others first',
   'coach.hornet': 'Hornets are walls — you cannot move them',
+  'coach.honey': 'Honey traps a bee flying through it — plan the order!',
   'result.win': 'Hive Freed!',
   'result.lose': 'Out of Moves',
   'result.loseQueen': 'The Queen left too early!',

@@ -19,6 +19,7 @@ export class PreloadScene extends Phaser.Scene {
     this.makeBeeVariant('beeQueen', 0xff8fc0) // rose body = royalty, reads distinct
     this.makeHornetTexture()
     this.makeCrownTexture()
+    this.makeHoneyTexture()
     this.makeDotTexture()
     this.scene.start('Menu')
   }
@@ -157,6 +158,28 @@ export class PreloadScene extends Phaser.Scene {
     g.fillCircle(18, 34, 3)
     g.fillCircle(46, 34, 3)
     g.generateTexture('crown', 64, 48)
+    g.destroy()
+  }
+
+  /** A glossy amber honey pool that fills a cell — visibly sticky. */
+  private makeHoneyTexture(): void {
+    const g = this.make.graphics({}, false)
+    const amber = 0xf3a712
+    const amberDark = 0xc47a00
+    const pts = this.hexPoints(64, 64, 56)
+    g.fillStyle(amberDark, 1)
+    g.fillPoints(pts, true)
+    g.fillStyle(amber, 1)
+    g.fillPoints(this.hexPoints(64, 64, 48), true)
+    // Drip blobs + glossy highlight so it reads as sticky, not just a colour.
+    g.fillStyle(amberDark, 1)
+    g.fillCircle(64, 104, 10)
+    g.fillCircle(40, 96, 7)
+    g.fillStyle(0xffe08a, 0.7)
+    g.fillEllipse(54, 46, 34, 16)
+    g.fillStyle(0xffffff, 0.5)
+    g.fillCircle(48, 42, 5)
+    g.generateTexture('honey', 128, 128)
     g.destroy()
   }
 

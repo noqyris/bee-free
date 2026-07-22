@@ -17,6 +17,7 @@ export interface LevelSlot {
   rayBias: number
   hasQueen: boolean
   hornets: number
+  honey: number
   seed: number
   attempts: number
 }
@@ -128,6 +129,29 @@ export function slotFor(id: number): LevelSlot {
     slack = Math.max(slack, 2)
   }
 
+  // Obstacles (decided before the depth band / budget so those stay consistent):
+  //  - Queen (must leave last) from L12 on ~a third of levels.
+  //  - Hornets (permanent walls) ramping in from L22.
+  let hasQueen = id >= 12 && (id % 3 === 0 || isSpike)
+  let hornets = 0
+  if (id >= 22) hornets = 1
+  if (id >= 60) hornets = 2
+  if (id >= 110) hornets = 3
+  if (isBreather) hornets = Math.max(0, hornets - 1) // ease off on relief levels
+
+  // Honey "puzzle" levels (every 5th from L40): a bee flying through honey gets
+  // stuck, breaking greedy-monotonicity and forcing real ordering. Kept small
+  // and free of queen/hornets so the search validator stays fast and the
+  // strategic mechanic reads clearly.
+  let honey = 0
+  if (id >= 40 && id % 5 === 0) {
+    honey = id >= 100 ? 2 : 1
+    bees = Math.min(bees, 9)
+    hornets = 0
+    hasQueen = false
+    depth = Math.max(depth, 2)
+  }
+
   bees = clamp(bees, 3, 34)
   slack = clamp(slack, 0, 4)
   const minDepth = clamp(depth - 1, 0, 14)
@@ -137,18 +161,8 @@ export function slotFor(id: number): LevelSlot {
   const spareFrac = lerp(0.5, 1.0, p)
   const threeStarSpare = clamp(Math.round(slack * spareFrac), 0, slack)
 
-  // Obstacles (introduced early so the game gets interesting quickly):
-  //  - Queen (must leave last) from L12 on ~a third of levels.
-  //  - Hornets (permanent walls) ramping in from L22.
-  const hasQueen = id >= 12 && (id % 3 === 0 || isSpike)
-  let hornets = 0
-  if (id >= 22) hornets = 1
-  if (id >= 60) hornets = 2
-  if (id >= 110) hornets = 3
-  if (isBreather) hornets = Math.max(0, hornets - 1) // ease off on relief levels
-
-  // Denser boards (up to ~46% fill) → more path crossings → more blocked bees.
-  const neededCapacity = Math.ceil((bees + hornets) / 0.46)
+  const fillTarget = honey > 0 ? 0.52 : 0.46
+  const neededCapacity = Math.ceil((bees + hornets) / fillTarget)
   const shape = chooseShape(chapter, neededCapacity, id)
 
   return {
@@ -163,6 +177,7 @@ export function slotFor(id: number): LevelSlot {
     rayBias,
     hasQueen,
     hornets,
+    honey,
     seed: (1000 + id * 7919) >>> 0,
     attempts: 500,
   }

@@ -25,6 +25,7 @@ interface GameSceneData {
 
 type EscapedOutcome = Extract<TapOutcome, { kind: 'escaped' }>
 type BlockedOutcome = Extract<TapOutcome, { kind: 'blocked' }>
+type StuckOutcome = Extract<TapOutcome, { kind: 'stuck' }>
 
 export class GameScene extends Phaser.Scene {
   private board!: BoardState
@@ -116,6 +117,7 @@ export class GameScene extends Phaser.Scene {
 
   private drawCells(): void {
     const s = this.cellSize / 62
+    const honey = new Set((this.level.honeyCells ?? []).map(([q, r]) => `${q},${r}`))
     for (const [q, r] of this.level.cells) {
       const { x, y } = this.cellToWorld(q, r)
       // Themed cell: stroke-colored border hex behind a slightly smaller fill.
@@ -123,6 +125,9 @@ export class GameScene extends Phaser.Scene {
       this.add.image(x, y, 'hex').setScale(s).setTint(this.theme.cellStroke)
       this.add.image(x, y, 'hex').setScale(s * 0.88).setTint(this.theme.cellFill)
       this.add.image(x, y - s * 6, 'hex').setScale(s * 0.6).setTint(0xffffff).setAlpha(0.08)
+      if (honey.has(`${q},${r}`)) {
+        this.add.image(x, y, 'honey').setScale(s * 0.92).setDepth(6)
+      }
     }
   }
 
@@ -216,8 +221,10 @@ export class GameScene extends Phaser.Scene {
   private showCoach(): void {
     const id = this.level.id
     const kinds = new Set(this.board.allOccupants().map((o) => o.kind))
-    let key: 'coach.tap' | 'coach.queen' | 'coach.hornet' | null = null
+    const hasHoney = (this.level.honeyCells?.length ?? 0) > 0
+    let key: 'coach.tap' | 'coach.queen' | 'coach.hornet' | 'coach.honey' | null = null
     if (id <= 2) key = 'coach.tap'
+    else if (hasHoney && id <= 60) key = 'coach.honey'
     else if (kinds.has('queen') && id <= 16) key = 'coach.queen'
     else if (kinds.has('hornet') && id <= 30) key = 'coach.hornet'
     if (!key) return
@@ -350,6 +357,9 @@ export class GameScene extends Phaser.Scene {
       this.comboCount = now - this.lastEscapeAt <= juice.escape.comboWindowMs ? this.comboCount + 1 : 1
       this.lastEscapeAt = now
       this.animateEscape(occ, sprite, outcome)
+    } else if (outcome.kind === 'stuck') {
+      this.comboCount = 0
+      this.animateStuck(occ, sprite, outcome)
     } else {
       this.comboCount = 0
       this.animateBump(occ, sprite, outcome)
@@ -363,13 +373,16 @@ export class GameScene extends Phaser.Scene {
     const { ux, uy } = this.flightUnit(occ)
     const stepPx = neighborDistance(this.cellSize)
     const willViolate = occ.kind === 'queen' && this.board.remaining > 1
-    const safe = outcome.kind === 'escaped' && !willViolate
-    const color = safe ? 0x5dff9b : 0xff5a5a
 
-    const dist =
-      outcome.kind === 'escaped'
-        ? stepPx * (outcome.path.length + 1)
-        : stepPx * (outcome.path.length + 1) - stepPx * 0.5
+    // green = clean escape, amber = will stick on honey, red = bump / queen early.
+    let mode: 'safe' | 'stuck' | 'bad'
+    if (outcome.kind === 'escaped' && !willViolate) mode = 'safe'
+    else if (outcome.kind === 'stuck' && !willViolate) mode = 'stuck'
+    else mode = 'bad'
+    const color = mode === 'safe' ? 0x5dff9b : mode === 'stuck' ? 0xffb43a : 0xff5a5a
+
+    const cells = outcome.path.length + 1
+    const dist = outcome.kind === 'blocked' ? stepPx * cells - stepPx * 0.5 : stepPx * cells
     const ex = start.x + ux * dist
     const ey = start.y + uy * dist
 
@@ -381,12 +394,11 @@ export class GameScene extends Phaser.Scene {
     g.lineTo(ex, ey)
     g.strokePath()
 
-    // Arrowhead (safe) or a blocked marker (bad).
     const head = this.cellSize * 0.34
     const px = -uy
     const py = ux
     g.fillStyle(color, 0.95)
-    if (safe) {
+    if (mode === 'safe') {
       g.fillTriangle(
         ex + ux * head,
         ey + uy * head,
@@ -395,8 +407,12 @@ export class GameScene extends Phaser.Scene {
         ex - ux * head * 0.4 - px * head * 0.7,
         ey - uy * head * 0.4 - py * head * 0.7,
       )
+    } else if (mode === 'stuck') {
+      // A filled drop at the honey cell = "it will get stuck here".
+      g.fillCircle(ex, ey, this.cellSize * 0.24)
+      g.lineStyle(Math.max(4, this.cellSize * 0.08), 0x7a4a00, 0.9)
+      g.strokeCircle(ex, ey, this.cellSize * 0.24)
     } else {
-      // A cross at the stop point = "blocked / don't".
       const s = this.cellSize * 0.26
       g.lineStyle(Math.max(6, this.cellSize * 0.14), color, 0.95)
       g.beginPath()
@@ -523,6 +539,40 @@ export class GameScene extends Phaser.Scene {
                 this.resolveAfterAction()
               },
             })
+          },
+        })
+      },
+    })
+  }
+
+  /** Bee flies into a honey cell and plops to a stop, stuck there. */
+  private animateStuck(occ: CellOccupant, sprite: Phaser.GameObjects.Sprite, outcome: StuckOutcome): void {
+    const cells = outcome.path.length + 1 // straight to the honey cell
+    const duration = Math.max(juice.flight.minDurationMs, cells * juice.flight.msPerCell)
+    const target = this.cellToWorld(outcome.at.q, outcome.at.r)
+
+    sprite.setDepth(100)
+    this.tweens.add({
+      targets: sprite,
+      x: target.x,
+      y: target.y,
+      duration,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        this.dustEmitter.explode(juice.bump.dust.count, target.x, target.y)
+        // Gooey plop: squash then settle, and stay put on the honey.
+        this.tweens.add({
+          targets: sprite,
+          scaleX: this.beeScale * 1.25,
+          scaleY: this.beeScale * 0.75,
+          duration: juice.bump.squashMs,
+          yoyo: true,
+          ease: 'Quad.easeOut',
+          onComplete: () => {
+            sprite.setDepth(occ.kind === 'queen' ? 12 : 10)
+            sprite.setScale(this.beeScale)
+            this.startIdle(sprite)
+            this.resolveAfterAction()
           },
         })
       },

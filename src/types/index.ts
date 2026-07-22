@@ -55,6 +55,8 @@ export interface LevelData {
   readonly name?: string
   /** Axial coords [q, r] of every playable cell — defines the board shape. */
   readonly cells: ReadonlyArray<readonly [number, number]>
+  /** Honey cells [q, r]: a bee flying through an empty one gets stuck there. */
+  readonly honeyCells?: ReadonlyArray<readonly [number, number]>
   readonly bees: ReadonlyArray<BeeSpec>
   readonly moveBudget: number
   /** Moves that must be left over (>=) on a win to earn 3 stars. */
@@ -73,6 +75,13 @@ export type TapOutcome =
       readonly kind: 'blocked'
       readonly path: ReadonlyArray<Axial>
       readonly blocker: Axial
+    }
+  | {
+      // Flew into an empty honey cell and got stuck there (relocated, still on
+      // the board as a blocker). Consumes a move; a second tap flies it onward.
+      readonly kind: 'stuck'
+      readonly path: ReadonlyArray<Axial>
+      readonly at: Axial
     }
 
 export type GameStatus = 'playing' | 'won' | 'lost'
