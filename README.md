@@ -27,6 +27,28 @@ npm run typecheck   # strict TS
 npm run build       # production bundle (relative base, Capacitor-ready)
 ```
 
+## Run as a native iOS app (Capacitor)
+
+The Capacitor iOS shell is set up (`ios/`, `capacitor.config.ts`, appId
+`com.beefree.hiveescape`, portrait-locked). The **Capacitor 8 CLI needs Node ≥ 22**
+(the rest of the toolchain runs on Node 21 fine), so select it first:
+
+```bash
+nvm use 22
+npm run build                       # web bundle → dist/
+npx cap sync ios                    # copy dist into the iOS project
+# build + install + launch on a booted simulator:
+xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+  -sdk iphonesimulator -destination "id=<SIMULATOR_UDID>" \
+  -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build
+xcrun simctl install <SIMULATOR_UDID> ios/build/Build/Products/Debug-iphonesimulator/App.app
+xcrun simctl launch  <SIMULATOR_UDID> com.beefree.hiveescape
+```
+
+`xcrun simctl list devices booted` lists simulator UDIDs. Capacitor 8 uses Swift
+Package Manager (no CocoaPods). After changing web code, re-run `npm run build`
+then `npx cap sync ios`.
+
 ## Level generation (M2)
 
 Levels are generated **offline** and shipped as static JSON — never generated at
