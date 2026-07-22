@@ -35,8 +35,19 @@ direction was unclear, the following were added:
   ordering. Trivial (orderless / over-slacked) levels dropped from 40/150 to 11
   (all in the tutorial). Run `npx tsx scripts/analyzeLevels.ts` for the diagnostics.
 
-Still deferred: honey cells, wax-capped, sleeping bees (the `CellOccupant`
-interface and the solver's obstacle handling are ready for them).
+- **Honey cells** (23 "puzzle" levels, every 5th from L40): a bee flying through
+  an empty honey cell gets **stuck** on it and becomes a new blocker. This is the
+  one mechanic that breaks the "removing a bee only unblocks" monotonicity — so
+  escape **order genuinely matters** and a legal move can strand you into an
+  unsolvable state. Because solvability is no longer guaranteed by construction,
+  `src/systems/SolverSearch.ts` runs a real BFS (over the actual BoardState
+  rules) to validate every honey level and derive its move budget from the true
+  minimum. The aim preview shows an amber "will stick" marker; a coach hint
+  teaches it. Honey levels are kept small and queen/hornet-free so validation is
+  fast (full generation ~9s).
+
+Still deferred: wax-capped and sleeping bees (the `CellOccupant` interface is
+ready for them).
 
 ## Development
 
