@@ -1,0 +1,18 @@
+export const en = {
+  'app.title': 'Bee Free',
+  'app.subtitle': 'Hive Escape Puzzle',
+  'menu.tagline': 'Tap bees to fly them out of the crowded hive',
+  'menu.level': 'Level {n}',
+  'hud.level': 'Level {n}',
+  'hud.moves': 'MOVES',
+  'result.win': 'Hive Freed!',
+  'result.lose': 'Out of Moves',
+  'result.movesUsed': 'Moves used: {used} / {budget}',
+  'result.beesLeft.one': '1 bee still stuck',
+  'result.beesLeft.other': '{n} bees still stuck',
+  'result.next': 'Next Level',
+  'result.retry': 'Try Again',
+  'result.replay': 'Replay',
+  'result.menu': 'Menu',
+  'version.label': 'v{version} — M1 core loop',
+} as const
