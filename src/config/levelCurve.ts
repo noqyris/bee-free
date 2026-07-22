@@ -15,6 +15,8 @@ export interface LevelSlot {
   slack: number // move budget above the bee count
   threeStarSpare: number // moves that must remain for 3 stars
   rayBias: number
+  hasQueen: boolean
+  hornets: number
   seed: number
   attempts: number
 }
@@ -94,42 +96,59 @@ export function slotFor(id: number): LevelSlot {
   const isSpike = id % 10 === 0
   const isBreather = id % 10 === 1 && id > 1
 
-  // Bee count ramps 2 → ~30, front-loaded slightly.
-  let bees = Math.round(lerp(2, 30, Math.pow(p, 0.85)))
-  // Dependency depth ramps 0 → ~6.5.
-  let depth = Math.round(6.5 * Math.pow(p, 1.1))
-  // Slack shrinks from forgiving to tight.
-  let slack = Math.round(lerp(7, 1, p))
-  // Ray bias deepens chains later in the game.
-  const rayBias = lerp(1.5, 3.0, p)
+  // Bee count ramps 3 → ~30, front-loaded (exponent < 1) so real puzzles start
+  // early instead of after a long trivial stretch.
+  let bees = Math.round(lerp(3, 30, Math.pow(p, 0.7)))
+  // Dependency depth ramps 1 → ~8: even early non-tutorial levels force ordering.
+  let depth = Math.round(lerp(1, 8, Math.pow(p, 0.9)))
+  // Slack (moves above the minimum): tight throughout, near-perfect play late.
+  let slack = Math.round(lerp(3, 0.4, p))
+  // Ray bias: long rays cross more bees → fewer "free at start" bees, harder scan.
+  const rayBias = lerp(2.3, 3.6, p)
 
   // Saw-tooth: a spike every 10th level, a breather right after it.
   if (isSpike) {
     bees += 3
     depth += 1
-    slack = Math.max(1, slack - 1)
   } else if (isBreather) {
-    bees = Math.max(2, bees - 2)
-    depth = Math.max(0, depth - 1)
-    slack += 2
+    bees = Math.max(3, bees - 2)
+    depth = Math.max(1, depth - 1)
+    slack += 1
   }
 
-  // Tutorial (L1–8): one concept at a time, and L1–5 are practically unfailable.
-  if (id <= 8) {
-    bees = Math.min(bees, 2 + id)
-    depth = Math.min(depth, id <= 4 ? 0 : 1)
+  // Tutorial (L1–6): gentle and one concept at a time, but NOT trivial — a small
+  // forced order appears by L3 so the core "read the arrow / order matters" idea
+  // is taught, not just clicked through.
+  if (id <= 3) {
+    bees = Math.min(bees, 2 + id) // L1:3, L2:4-ish clamp
+    depth = id <= 2 ? 0 : 1
+    slack = Math.max(slack, 2)
+  } else if (id <= 6) {
+    depth = Math.min(depth, 2)
+    slack = Math.max(slack, 2)
   }
-  if (id <= 5) slack = Math.max(slack, 8)
 
-  bees = clamp(bees, 2, 34)
-  const minDepth = clamp(depth - 1, 0, 12)
-  const maxDepth = clamp(depth + 1, minDepth, 14)
+  bees = clamp(bees, 3, 34)
+  slack = clamp(slack, 0, 4)
+  const minDepth = clamp(depth - 1, 0, 14)
+  const maxDepth = clamp(depth + 1, minDepth + 1, 16)
 
-  // 3-star tightens: early wins are easy 3-stars, late ones demand near-perfection.
-  const spareFrac = lerp(0.15, 1.0, p)
+  // 3-star always demands most of the (small) slack — near-perfect play.
+  const spareFrac = lerp(0.5, 1.0, p)
   const threeStarSpare = clamp(Math.round(slack * spareFrac), 0, slack)
 
-  const neededCapacity = Math.ceil(bees / 0.42)
+  // Obstacles (introduced early so the game gets interesting quickly):
+  //  - Queen (must leave last) from L12 on ~a third of levels.
+  //  - Hornets (permanent walls) ramping in from L22.
+  const hasQueen = id >= 12 && (id % 3 === 0 || isSpike)
+  let hornets = 0
+  if (id >= 22) hornets = 1
+  if (id >= 60) hornets = 2
+  if (id >= 110) hornets = 3
+  if (isBreather) hornets = Math.max(0, hornets - 1) // ease off on relief levels
+
+  // Denser boards (up to ~46% fill) → more path crossings → more blocked bees.
+  const neededCapacity = Math.ceil((bees + hornets) / 0.46)
   const shape = chooseShape(chapter, neededCapacity, id)
 
   return {
@@ -142,6 +161,8 @@ export function slotFor(id: number): LevelSlot {
     slack,
     threeStarSpare,
     rayBias,
+    hasQueen,
+    hornets,
     seed: (1000 + id * 7919) >>> 0,
     attempts: 500,
   }

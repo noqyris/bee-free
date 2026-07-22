@@ -9,6 +9,7 @@ interface LevelFailedData {
   levelIndex: number
   chapter: number
   beesLeft: number
+  queenLeftEarly?: boolean
 }
 
 export class LevelFailedScene extends Phaser.Scene {
@@ -44,12 +45,14 @@ export class LevelFailedScene extends Phaser.Scene {
 
     panel.add(
       this.add
-        .text(0, -172, t('result.lose'), {
+        .text(0, -172, this.params.queenLeftEarly ? t('result.loseQueen') : t('result.lose'), {
           fontFamily: FONT_STACK,
-          fontSize: '52px',
+          fontSize: this.params.queenLeftEarly ? '40px' : '52px',
           color: '#ff8b57',
           stroke: '#000000',
           strokeThickness: 6,
+          align: 'center',
+          wordWrap: { width: 480 },
         })
         .setOrigin(0.5),
     )

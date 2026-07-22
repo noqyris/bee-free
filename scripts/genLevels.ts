@@ -19,7 +19,7 @@ interface OutBee {
   q: number
   r: number
   dir: number
-  kind: 'bee'
+  kind: 'bee' | 'queen' | 'hornet'
 }
 interface OutLevel {
   id: number
@@ -31,6 +31,8 @@ interface OutLevel {
   threeStarSpare: number
   difficulty: number
   depDepth: number
+  hornets: number
+  hasQueen: boolean
 }
 
 const slots = buildLevelCurve()
@@ -39,33 +41,40 @@ const failures: string[] = []
 
 for (const slot of slots) {
   const cells = shapeCells(slot.shape)
-  const { bees, metrics } = generateLevel({
+  const { occupants, metrics } = generateLevel({
     boardCells: cells,
     targetBees: slot.targetBees,
     minDepth: slot.minDepth,
     maxDepth: slot.maxDepth,
     rayBias: slot.rayBias,
+    hasQueen: slot.hasQueen,
+    hornets: slot.hornets,
     seed: slot.seed,
     attempts: slot.attempts,
   })
 
-  const moveBudget = bees.length + slot.slack
+  // metrics.beeCount = goal occupants (bees + queen); the budget is over goals.
+  const goals = metrics.beeCount
+  const moveBudget = goals + slot.slack
   if (!metrics.solvable) failures.push(`L${slot.id}: NOT solvable`)
-  if (bees.length < 2) failures.push(`L${slot.id}: only ${bees.length} bees`)
-  if (moveBudget < bees.length) failures.push(`L${slot.id}: budget < bees`)
-  if (slot.threeStarSpare > moveBudget - bees.length)
+  if (goals < 2) failures.push(`L${slot.id}: only ${goals} goal occupants`)
+  if (moveBudget < goals) failures.push(`L${slot.id}: budget < goals`)
+  if (slot.threeStarSpare > moveBudget - goals)
     failures.push(`L${slot.id}: 3-star spare unreachable`)
+  if (slot.hasQueen && !metrics.hasQueen) failures.push(`L${slot.id}: queen requested but absent`)
 
   levels.push({
     id: slot.id,
     chapter: slot.chapter,
     shape: shapeLabel(slot.shape),
     cells: cells.map(([q, r]) => [q, r] as [number, number]),
-    bees: bees.map((b) => ({ q: b.q, r: b.r, dir: b.dir, kind: 'bee' as const })),
+    bees: occupants.map((b) => ({ q: b.q, r: b.r, dir: b.dir, kind: b.kind })),
     moveBudget,
-    threeStarSpare: Math.min(slot.threeStarSpare, moveBudget - bees.length),
+    threeStarSpare: Math.min(slot.threeStarSpare, moveBudget - goals),
     difficulty: Math.round(metrics.difficulty * 10) / 10,
     depDepth: metrics.depDepth,
+    hornets: metrics.hornets,
+    hasQueen: metrics.hasQueen,
   })
 }
 
@@ -79,18 +88,20 @@ writeFileSync(OUT, JSON.stringify({ schema: 1, count: levels.length, levels }, n
 
 // Summary per chapter for a human sanity check.
 console.log(`\nGenerated ${levels.length} levels → ${OUT}\n`)
-console.log('Chapter |  bees(min–max) | depth(min–max) | budget slack | difficulty(avg)')
-console.log('--------|----------------|----------------|--------------|----------------')
+console.log('Chapter | goals(min–max) | depth(min–max) | queens | hornets | difficulty(avg)')
+console.log('--------|----------------|----------------|--------|---------|----------------')
 for (let ch = 1; ch <= 6; ch++) {
   const g = levels.filter((l) => l.chapter === ch)
-  const bees = g.map((l) => l.bees.length)
+  const goalsOf = (l: OutLevel) => l.bees.filter((b) => b.kind !== 'hornet').length
+  const goals = g.map(goalsOf)
   const depth = g.map((l) => l.depDepth)
-  const slack = g.map((l) => l.moveBudget - l.bees.length)
   const diff = g.map((l) => l.difficulty)
+  const queens = g.filter((l) => l.hasQueen).length
+  const hornets = g.reduce((a, l) => a + l.hornets, 0)
   const rng = (a: number[]) => `${Math.min(...a)}–${Math.max(...a)}`
   const avg = (a: number[]) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1)
   console.log(
-    `   ${ch}    |    ${rng(bees).padEnd(11)}| ${rng(depth).padEnd(15)}| ${rng(slack).padEnd(13)}| ${avg(diff)}`,
+    `   ${ch}    |    ${rng(goals).padEnd(11)}| ${rng(depth).padEnd(15)}|   ${String(queens).padEnd(5)}|   ${String(hornets).padEnd(6)}| ${avg(diff)}`,
   )
 }
 console.log('')

@@ -1,4 +1,4 @@
-import type { BeeSpec, Direction, LevelData } from '../types'
+import type { BeeSpec, Direction, LevelData, OccupantKind } from '../types'
 import generated from './levels.generated.json'
 
 /**
@@ -11,7 +11,7 @@ const LEVELS: ReadonlyArray<LevelData> = generated.levels.map((l) => ({
   chapter: l.chapter,
   cells: l.cells.map((c) => [c[0], c[1]] as readonly [number, number]),
   bees: l.bees.map(
-    (b): BeeSpec => ({ q: b.q, r: b.r, dir: b.dir as Direction, kind: 'bee' }),
+    (b): BeeSpec => ({ q: b.q, r: b.r, dir: b.dir as Direction, kind: b.kind as OccupantKind }),
   ),
   moveBudget: l.moveBudget,
   threeStarSpare: l.threeStarSpare,

@@ -13,6 +13,7 @@ export class BoardState {
   private cellSet = new Set<string>()
   private budget = 0
   private occupants = new Map<string, CellOccupant>()
+  private queenViolated = false
 
   constructor(level?: LevelData) {
     if (!level) return
@@ -41,7 +42,10 @@ export class BoardState {
   }
 
   get status(): GameStatus {
-    if (this.occupants.size === 0) return 'won'
+    // The Queen leaving early is an immediate, unrecoverable loss.
+    if (this.queenViolated) return 'lost'
+    // Win when no goal occupants remain (hornets are permanent, don't count).
+    if (this.goalRemaining === 0) return 'won'
     if (this.movesUsed >= this.budget) return 'lost'
     return 'playing'
   }
@@ -50,8 +54,20 @@ export class BoardState {
     return Math.max(0, this.budget - this.movesUsed)
   }
 
+  /** Goal occupants left to clear (bees + queen); hornets excluded. */
   get remaining(): number {
-    return this.occupants.size
+    let n = 0
+    for (const o of this.occupants.values()) if (o.isGoal()) n++
+    return n
+  }
+
+  private get goalRemaining(): number {
+    return this.remaining
+  }
+
+  /** True when the loss was specifically the Queen leaving before the others. */
+  get queenLeftEarly(): boolean {
+    return this.queenViolated
   }
 
   occupantAt(q: number, r: number): CellOccupant | undefined {
@@ -91,7 +107,11 @@ export class BoardState {
     if (!occ || !occ.isTappable()) return undefined
     const outcome = this.trace(occ)
     this.movesUsed++
-    if (outcome.kind === 'escaped') this.occupants.delete(axialKey(q, r))
+    if (outcome.kind === 'escaped') {
+      this.occupants.delete(axialKey(q, r))
+      // Queen must be last: if she leaves with any goal still on the board, lose.
+      if (occ.kind === 'queen' && this.goalRemaining > 0) this.queenViolated = true
+    }
     return outcome
   }
 
@@ -106,6 +126,7 @@ export class BoardState {
     copy.cellSet = this.cellSet
     copy.budget = this.budget
     copy.movesUsed = this.movesUsed
+    copy.queenViolated = this.queenViolated
     for (const [key, occ] of this.occupants) copy.occupants.set(key, occ.clone())
     return copy
   }

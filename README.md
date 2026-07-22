@@ -14,7 +14,29 @@ still spent.
 - [ ] M5 — Monetization (AdMob UMP/ATT, rewarded + interstitial, RevenueCat)
 - [ ] M6 — Ship prep (Capacitor iOS, icons/splash, App Store checklist)
 
-Partial: honey currency, a progress/level map, and per-chapter theming already exist (built alongside M2). Obstacle types (honey/wax/queen/hornet) are intentionally deferred — the current 150 levels use the pure-bee mechanic, with generator/solver/`CellOccupant` hooks ready for them.
+Partial: honey currency, a progress/level map, and per-chapter theming already exist (built alongside M2).
+
+### Obstacles & clarity pass (post-M2 tuning)
+
+After playtesting showed the pure-bee levels were too easy and the flight
+direction was unclear, the following were added:
+
+- **Queen** (rose bee + crown): a goal that must be the **last** to leave — the
+  level is lost the instant she escapes while any other bee remains. Introduced
+  from L12. Creates real ordering puzzles with a fail state.
+- **Hornet** (dark red): a permanent wall — never movable, never a goal, excluded
+  from the win. Introduced from L22. The generator keeps every bee's path clear
+  of hornets so no bee is ever trapped.
+- **Aim preview**: press-and-hold a bee to see its exact flight path — a green
+  arrow if it will escape, a red X if it will bump (or if it is the queen leaving
+  early). Release on the bee to fly, release elsewhere to cancel. This teaches
+  the fixed-direction mechanic directly.
+- **Difficulty rebalanced**: tighter move budgets, faster ramp, deeper forced
+  ordering. Trivial (orderless / over-slacked) levels dropped from 40/150 to 11
+  (all in the tutorial). Run `npx tsx scripts/analyzeLevels.ts` for the diagnostics.
+
+Still deferred: honey cells, wax-capped, sleeping bees (the `CellOccupant`
+interface and the solver's obstacle handling are ready for them).
 
 ## Development
 

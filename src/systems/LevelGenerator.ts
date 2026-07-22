@@ -4,26 +4,29 @@ import { makeRng, mixSeed, weightedPick, type Rng } from '../utils/rng'
 import type { Cell } from './boardShapes'
 
 /**
- * Solvability-guaranteed reverse generation (spec §4).
+ * Solvability-guaranteed reverse generation (spec §4), with obstacles.
  *
- * We build the solution in reverse: the LAST bee to escape is placed first on
- * an empty board (clear path guaranteed), and each subsequent bee is placed so
- * its straight path is clear of every already-placed bee. Since already-placed
- * bees are exactly the ones still present when this bee escapes in the forward
- * solution, escaping in reverse-placement order is always a valid, bump-free
- * solution. Dependencies (forced ordering) emerge because later-placed bees can
- * land in an earlier bee's path.
+ * Bees: the last-to-escape bee is placed first on an (otherwise hornet-only)
+ * board, and each next bee is placed so its straight path is clear of every
+ * already-placed bee AND every hornet. Escaping in reverse-placement order is
+ * then always a valid, bump-free solution.
+ *
+ * Hornets: permanent blockers, seeded before any bee. Because every bee's path
+ * is kept clear of hornets at placement, no bee is ever hornet-trapped.
+ *
+ * Queen: the first-placed bee (escapes last) becomes the queen. Since no later
+ * bee's path can contain her, she blocks nobody, so the queen-last solution
+ * always exists.
  */
 
+export interface GenOccupant extends SolverBee {}
+
 export interface GenBoard {
-  bees: SolverBee[]
+  occupants: GenOccupant[]
   metrics: BoardMetrics
 }
 
-/**
- * Length of the in-board straight ray from (q,r) in direction `dir`, or -1 if a
- * currently-occupied cell blocks it before it leaves the board.
- */
+/** In-board ray length from (q,r) along dir, or -1 if a placed occupant blocks it. */
 function clearRayLen(
   q: number,
   r: number,
@@ -39,8 +42,8 @@ function clearRayLen(
     cq += v.q
     cr += v.r
     const k = axialKey(cq, cr)
-    if (!boardSet.has(k)) return len // left the board with a clear path
-    if (occ.has(k)) return -1 // blocked by an already-placed bee
+    if (!boardSet.has(k)) return len
+    if (occ.has(k)) return -1
     len++
   }
 }
@@ -52,20 +55,16 @@ interface Candidate {
   len: number
 }
 
-/**
- * Place up to `targetBees` bees on the board. `rayBias` steers difficulty:
- * higher values favor long internal rays, which are more likely to be blocked
- * by bees placed later, producing deeper dependency chains.
- */
 function placeBees(
   boardCells: ReadonlyArray<Cell>,
   boardSet: ReadonlySet<string>,
+  hornetKeys: ReadonlySet<string>,
   targetBees: number,
   rayBias: number,
   rng: Rng,
-): SolverBee[] {
-  const occ = new Set<string>()
-  const bees: SolverBee[] = []
+): GenOccupant[] {
+  const occ = new Set<string>(hornetKeys) // hornets are permanent, block placement + rays
+  const bees: GenOccupant[] = []
 
   while (bees.length < targetBees) {
     const candidates: Candidate[] = []
@@ -77,13 +76,27 @@ function placeBees(
       }
     }
     if (candidates.length === 0) break
-
     const chosen = weightedPick(rng, candidates, (c) => Math.pow(c.len + 1, rayBias))
     occ.add(axialKey(chosen.q, chosen.r))
-    bees.push({ q: chosen.q, r: chosen.r, dir: chosen.dir })
+    bees.push({ q: chosen.q, r: chosen.r, dir: chosen.dir, kind: 'bee' })
   }
-
   return bees
+}
+
+function pickHornetCells(
+  boardCells: ReadonlyArray<Cell>,
+  count: number,
+  rng: Rng,
+): Set<string> {
+  const chosen = new Set<string>()
+  if (count <= 0) return chosen
+  let guard = 0
+  while (chosen.size < count && guard < 300) {
+    const [q, r] = boardCells[Math.floor(rng() * boardCells.length)]
+    chosen.add(axialKey(q, r))
+    guard++
+  }
+  return chosen
 }
 
 export interface GenRequest {
@@ -94,14 +107,10 @@ export interface GenRequest {
   rayBias: number
   seed: number
   attempts: number
+  hornets: number
+  hasQueen: boolean
 }
 
-/**
- * Generate a board matching the requested difficulty band. Deterministic for a
- * given seed. Tries many sub-seeded attempts and keeps the one whose dependency
- * depth best fits [minDepth, maxDepth] (with the target bee count). Falls back
- * to the closest candidate so generation never fails outright.
- */
 export function generateLevel(req: GenRequest): GenBoard {
   const boardSet = new Set<string>()
   for (const [q, r] of req.boardCells) boardSet.add(axialKey(q, r))
@@ -113,28 +122,38 @@ export function generateLevel(req: GenRequest): GenBoard {
 
   for (let attempt = 0; attempt < req.attempts; attempt++) {
     const rng = makeRng(mixSeed(req.seed, attempt))
-    const bees = placeBees(req.boardCells, boardSet, req.targetBees, req.rayBias, rng)
-    const metrics = analyzeBoard(bees, boardSet, boardCells)
-    if (!metrics.solvable) continue // safety; reverse gen guarantees this anyway
+    const hornetKeys = pickHornetCells(req.boardCells, req.hornets, rng)
+    const bees = placeBees(req.boardCells, boardSet, hornetKeys, req.targetBees, req.rayBias, rng)
+
+    // Designate the first-placed bee (escapes last) as the queen.
+    if (req.hasQueen && bees.length >= 2) bees[0].kind = 'queen'
+
+    const hornets: GenOccupant[] = [...hornetKeys].map((k) => {
+      const [q, r] = k.split(',').map(Number)
+      return { q, r, dir: 0, kind: 'hornet' }
+    })
+    const occupants = [...hornets, ...bees]
+    const metrics = analyzeBoard(occupants, boardSet, boardCells)
+    if (!metrics.solvable) continue
 
     const beeShort = Math.max(0, req.targetBees - bees.length)
     const inBand = metrics.depDepth >= req.minDepth && metrics.depDepth <= req.maxDepth
-    // Lower is better: heavy penalty for missing bee count or depth band.
+    const queenMissing = req.hasQueen && !metrics.hasQueen ? 40 : 0
+    const hornetShort = Math.max(0, req.hornets - metrics.hornets) * 15
     const score =
-      beeShort * 50 + (inBand ? 0 : 20) + Math.abs(metrics.depDepth - depthMid)
+      beeShort * 50 + (inBand ? 0 : 20) + Math.abs(metrics.depDepth - depthMid) + queenMissing + hornetShort
 
     if (score < bestScore) {
-      best = { bees, metrics }
+      best = { occupants, metrics }
       bestScore = score
-      if (inBand && beeShort === 0) break // perfect fit — stop early
+      if (inBand && beeShort === 0 && queenMissing === 0 && hornetShort === 0) break
     }
   }
 
   if (!best) {
-    // Degenerate fallback: a single empty-path placement always solvable.
     const rng = makeRng(req.seed)
-    const bees = placeBees(req.boardCells, boardSet, req.targetBees, req.rayBias, rng)
-    best = { bees, metrics: analyzeBoard(bees, boardSet, boardCells) }
+    const bees = placeBees(req.boardCells, boardSet, new Set(), req.targetBees, req.rayBias, rng)
+    best = { occupants: bees, metrics: analyzeBoard(bees, boardSet, boardCells) }
   }
   return best
 }

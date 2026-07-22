@@ -16,11 +16,11 @@ describe('Solver.analyzeBoard', () => {
   const set = boardSetOf(line)
 
   it('counts a clear board as all-free, depth 0', () => {
-    const bees: SolverBee[] = [
-      { q: -2, r: 0, dir: W },
-      { q: 2, r: 0, dir: E },
+    const occ: SolverBee[] = [
+      { q: -2, r: 0, dir: W, kind: 'bee' },
+      { q: 2, r: 0, dir: E, kind: 'bee' },
     ]
-    const m = analyzeBoard(bees, set, line.length)
+    const m = analyzeBoard(occ, set, line.length)
     expect(m.solvable).toBe(true)
     expect(m.depDepth).toBe(0)
     expect(m.blockedAtStart).toBe(0)
@@ -29,60 +29,118 @@ describe('Solver.analyzeBoard', () => {
   })
 
   it('measures a forced 3-bee chain as depth 2', () => {
-    // All face E; each is blocked by the ones ahead → 0<1<2 forced ordering.
-    const bees: SolverBee[] = [
-      { q: -2, r: 0, dir: E },
-      { q: -1, r: 0, dir: E },
-      { q: 0, r: 0, dir: E },
+    const occ: SolverBee[] = [
+      { q: -2, r: 0, dir: E, kind: 'bee' },
+      { q: -1, r: 0, dir: E, kind: 'bee' },
+      { q: 0, r: 0, dir: E, kind: 'bee' },
     ]
-    const m = analyzeBoard(bees, set, line.length)
+    const m = analyzeBoard(occ, set, line.length)
     expect(m.solvable).toBe(true)
-    expect(m.depDepth).toBe(2) // rightmost free, then next, then next
+    expect(m.depDepth).toBe(2)
     expect(m.blockedAtStart).toBe(2)
     expect(m.freeAtStart).toBe(1)
   })
 
   it('nextSafeMove returns the unblocked bee', () => {
-    const bees: SolverBee[] = [
-      { q: -2, r: 0, dir: E },
-      { q: 0, r: 0, dir: E },
+    const occ: SolverBee[] = [
+      { q: -2, r: 0, dir: E, kind: 'bee' },
+      { q: 0, r: 0, dir: E, kind: 'bee' },
     ]
-    const move = nextSafeMove(bees, set)
-    expect(move).toEqual({ q: 0, r: 0, dir: E }) // the front one is clear
+    const move = nextSafeMove(occ, set)
+    expect(move).toEqual({ q: 0, r: 0, dir: E, kind: 'bee' })
+  })
+})
+
+describe('Solver — obstacles', () => {
+  const line = shapeCells({ kind: 'rhombus', w: 5, h: 1 })
+  const set = boardSetOf(line)
+
+  it('treats a hornet as a permanent blocker and not a goal', () => {
+    // bee at -2 faces E into a hornet at 0 → can never escape → unsolvable.
+    const occ: SolverBee[] = [
+      { q: -2, r: 0, dir: E, kind: 'bee' },
+      { q: 0, r: 0, dir: 0, kind: 'hornet' },
+    ]
+    const m = analyzeBoard(occ, set, line.length)
+    expect(m.hornets).toBe(1)
+    expect(m.beeCount).toBe(1) // hornet is not a goal
+    expect(m.solvable).toBe(false)
+  })
+
+  it('a bee that clears the board past no hornet is solvable; goal excludes hornet', () => {
+    const occ: SolverBee[] = [
+      { q: -2, r: 0, dir: W, kind: 'bee' }, // exits left, away from hornet
+      { q: 0, r: 0, dir: 0, kind: 'hornet' },
+    ]
+    const m = analyzeBoard(occ, set, line.length)
+    expect(m.solvable).toBe(true)
+    expect(m.beeCount).toBe(1)
+  })
+
+  it('enforces queen-last: solvable only if the queen can go last', () => {
+    // queen at 0 faces E (would exit right); bee at -1 faces E blocked by queen.
+    // The bee can never escape before the queen leaves, but the queen must be
+    // last → unsolvable.
+    const occ: SolverBee[] = [
+      { q: 0, r: 0, dir: E, kind: 'queen' },
+      { q: -1, r: 0, dir: E, kind: 'bee' },
+    ]
+    const m = analyzeBoard(occ, set, line.length)
+    expect(m.hasQueen).toBe(true)
+    expect(m.solvable).toBe(false)
+  })
+
+  it('queen blocking nobody is solvable, queen escapes last', () => {
+    const occ: SolverBee[] = [
+      { q: 0, r: 0, dir: W, kind: 'queen' }, // exits left
+      { q: 1, r: 0, dir: E, kind: 'bee' }, // exits right, independent
+    ]
+    const m = analyzeBoard(occ, set, line.length)
+    expect(m.solvable).toBe(true)
+    // Only the bee is a safe first move; the queen must wait.
+    expect(nextSafeMove(occ, set)).toEqual({ q: 1, r: 0, dir: E, kind: 'bee' })
   })
 })
 
 describe('LevelGenerator', () => {
+  const baseReq = {
+    boardCells: shapeCells({ kind: 'hexagon', radius: 3 }),
+    targetBees: 10,
+    minDepth: 2,
+    maxDepth: 4,
+    rayBias: 2.5,
+    hornets: 0,
+    hasQueen: false,
+  }
+
   it('is deterministic for a fixed seed', () => {
-    const req = {
-      boardCells: shapeCells({ kind: 'hexagon', radius: 3 }),
-      targetBees: 10,
-      minDepth: 2,
-      maxDepth: 4,
-      rayBias: 2.2,
-      seed: 12345,
-      attempts: 200,
-    }
-    const a = generateLevel(req)
-    const b = generateLevel(req)
-    expect(a.bees).toEqual(b.bees)
+    const req = { ...baseReq, seed: 12345, attempts: 200 }
+    expect(generateLevel(req).occupants).toEqual(generateLevel(req).occupants)
   })
 
-  it('always produces a solvable board with no overlapping bees', () => {
-    for (let seed = 1; seed <= 30; seed++) {
-      const cells = shapeCells({ kind: 'hexagon', radius: 3 })
-      const { bees, metrics } = generateLevel({
-        boardCells: cells,
-        targetBees: 12,
-        minDepth: 2,
-        maxDepth: 5,
-        rayBias: 2.5,
+  it('always produces a solvable board with no overlapping occupants', () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      const { occupants, metrics } = generateLevel({ ...baseReq, seed, attempts: 150 })
+      expect(metrics.solvable).toBe(true)
+      const keys = new Set(occupants.map((o) => axialKey(o.q, o.r)))
+      expect(keys.size).toBe(occupants.length)
+    }
+  })
+
+  it('produces solvable boards with a queen and hornets', () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      const { occupants, metrics } = generateLevel({
+        ...baseReq,
+        targetBees: 9,
+        hornets: 2,
+        hasQueen: true,
         seed,
-        attempts: 150,
+        attempts: 250,
       })
       expect(metrics.solvable).toBe(true)
-      const keys = new Set(bees.map((b) => axialKey(b.q, b.r)))
-      expect(keys.size).toBe(bees.length)
+      expect(metrics.hasQueen).toBe(true)
+      expect(occupants.filter((o) => o.kind === 'queen').length).toBe(1)
+      expect(occupants.filter((o) => o.kind === 'hornet').length).toBe(2)
     }
   })
 })

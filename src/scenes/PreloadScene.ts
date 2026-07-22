@@ -15,7 +15,10 @@ export class PreloadScene extends Phaser.Scene {
 
   create(): void {
     this.makeHexTexture()
-    this.makeBeeTexture()
+    this.makeBeeVariant('bee', colors.beeBody)
+    this.makeBeeVariant('beeQueen', 0xff8fc0) // rose body = royalty, reads distinct
+    this.makeHornetTexture()
+    this.makeCrownTexture()
     this.makeDotTexture()
     this.scene.start('Menu')
   }
@@ -41,10 +44,10 @@ export class PreloadScene extends Phaser.Scene {
 
   /**
    * Top-down bee facing East (dir0) in a 128×128 frame; rotated in -60° steps
-   * for the other five directions. Colors are chapter-independent so the bee
-   * always reads the same. Final assets ship six pre-rendered directions.
+   * for the other five directions. `bodyColor` distinguishes workers (yellow)
+   * from the queen (rose). Final assets ship six pre-rendered directions.
    */
-  private makeBeeTexture(): void {
+  private makeBeeVariant(key: string, bodyColor: number): void {
     const g = this.make.graphics({}, false)
 
     g.fillStyle(colors.beeWing, 0.85)
@@ -57,7 +60,7 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(colors.beeDark, 1)
     g.fillTriangle(12, 64, 28, 55, 28, 73)
 
-    g.fillStyle(colors.beeBody, 1)
+    g.fillStyle(bodyColor, 1)
     g.fillEllipse(60, 64, 76, 52)
 
     g.fillStyle(colors.beeDark, 1)
@@ -74,12 +77,87 @@ export class PreloadScene extends Phaser.Scene {
     g.fillCircle(103, 70, 3.5)
 
     // Direction arrow — readability-critical, shape-based (colorblind-safe).
+    // A big bold white chevron+shaft pointing East (dir0) so which way a bee
+    // will fly is unmistakable at a glance.
     g.fillStyle(colors.arrow, 1)
-    g.fillTriangle(66, 52, 66, 76, 88, 64)
-    g.lineStyle(4, colors.beeDark, 1)
-    g.strokeTriangle(66, 52, 66, 76, 88, 64)
+    g.lineStyle(5, colors.beeDark, 1)
+    // shaft
+    g.fillRect(40, 58, 34, 12)
+    g.strokeRect(40, 58, 34, 12)
+    // arrowhead
+    g.fillTriangle(70, 44, 70, 84, 100, 64)
+    g.strokeTriangle(70, 44, 70, 84, 100, 64)
 
-    g.generateTexture('bee', 128, 128)
+    g.generateTexture(key, 128, 128)
+    g.destroy()
+  }
+
+  /**
+   * A hornet: a menacing, static blocker. Deliberately a different silhouette
+   * from the bee (dark red, angular wings, angry eyes, NO direction arrow) so
+   * players read it as "wall, can't move" instantly.
+   */
+  private makeHornetTexture(): void {
+    const g = this.make.graphics({}, false)
+    const bodyDark = 0x3a0f0f
+    const bodyRed = 0x8f2b1c
+
+    // Angular wings
+    g.fillStyle(0x6a6a72, 0.85)
+    g.fillTriangle(52, 20, 90, 44, 40, 50)
+    g.fillTriangle(52, 108, 90, 84, 40, 78)
+    g.lineStyle(3, bodyDark, 0.6)
+    g.strokeTriangle(52, 20, 90, 44, 40, 50)
+    g.strokeTriangle(52, 108, 90, 84, 40, 78)
+
+    // Stinger
+    g.fillStyle(bodyDark, 1)
+    g.fillTriangle(10, 64, 30, 54, 30, 74)
+
+    // Body
+    g.fillStyle(bodyRed, 1)
+    g.fillEllipse(62, 64, 78, 54)
+    g.fillStyle(bodyDark, 1)
+    g.fillRect(48, 40, 10, 48)
+    g.fillRect(66, 40, 10, 48)
+    g.lineStyle(5, 0x1a0808, 1)
+    g.strokeEllipse(62, 64, 78, 54)
+
+    // Head + angry eyes
+    g.fillStyle(bodyDark, 1)
+    g.fillCircle(100, 64, 16)
+    g.fillStyle(0xff5a3c, 1)
+    g.fillTriangle(96, 56, 108, 60, 98, 64)
+    g.fillTriangle(96, 72, 108, 68, 98, 64)
+
+    g.generateTexture('hornet', 128, 128)
+    g.destroy()
+  }
+
+  /** Small gold crown, overlaid on the queen's head. */
+  private makeCrownTexture(): void {
+    const g = this.make.graphics({}, false)
+    g.fillStyle(0xffd23f, 1)
+    g.lineStyle(3, 0x8a5a00, 1)
+    // Crown band + three points
+    g.beginPath()
+    g.moveTo(6, 40)
+    g.lineTo(12, 14)
+    g.lineTo(24, 30)
+    g.lineTo(32, 8)
+    g.lineTo(40, 30)
+    g.lineTo(52, 14)
+    g.lineTo(58, 40)
+    g.closePath()
+    g.fillPath()
+    g.strokePath()
+    // Gems
+    g.fillStyle(0xff5a8a, 1)
+    g.fillCircle(32, 30, 4)
+    g.fillStyle(0x5ad1ff, 1)
+    g.fillCircle(18, 34, 3)
+    g.fillCircle(46, 34, 3)
+    g.generateTexture('crown', 64, 48)
     g.destroy()
   }
 

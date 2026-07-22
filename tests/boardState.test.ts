@@ -143,3 +143,68 @@ describe('BoardState', () => {
     expect(board.stateKey()).not.toBe(copy.stateKey())
   })
 })
+
+describe('BoardState — obstacles', () => {
+  it('loses immediately when the queen escapes with a bee still on the board', () => {
+    const board = new BoardState(
+      makeLevel({
+        bees: [
+          { q: 0, r: 0, dir: E, kind: 'queen' }, // clear path East → escapes
+          { q: 0, r: 1, dir: W, kind: 'bee' }, // unrelated bee still present
+        ],
+      }),
+    )
+    const outcome = board.tap(0, 0)
+    expect(outcome?.kind).toBe('escaped')
+    expect(board.movesUsed).toBe(1)
+    expect(board.status).toBe('lost')
+    expect(board.queenLeftEarly).toBe(true)
+  })
+
+  it('wins when the queen is the last to leave', () => {
+    const board = new BoardState(
+      makeLevel({
+        bees: [
+          { q: 0, r: 0, dir: E, kind: 'queen' },
+          { q: 1, r: -1, dir: NE, kind: 'bee' }, // edge cell, escapes NE
+        ],
+      }),
+    )
+    expect(board.tap(1, -1)?.kind).toBe('escaped') // clear the bee first
+    expect(board.status).toBe('playing')
+    expect(board.tap(0, 0)?.kind).toBe('escaped') // then the queen
+    expect(board.status).toBe('won')
+    expect(board.queenLeftEarly).toBe(false)
+  })
+
+  it('treats a hornet as an untappable permanent blocker excluded from the win', () => {
+    const board = new BoardState(
+      makeLevel({
+        bees: [
+          { q: -1, r: 0, dir: W, kind: 'bee' }, // escapes West
+          { q: 1, r: 0, dir: E, kind: 'hornet' }, // stays forever
+        ],
+      }),
+    )
+    expect(board.remaining).toBe(1) // hornet is not a goal
+    expect(board.tap(1, 0)).toBeUndefined() // hornet not tappable, no move spent
+    expect(board.movesUsed).toBe(0)
+    expect(board.tap(-1, 0)?.kind).toBe('escaped')
+    expect(board.status).toBe('won') // won although the hornet remains
+  })
+
+  it('a bee bumps off a hornet blocking its path (still costs a move)', () => {
+    const board = new BoardState(
+      makeLevel({
+        bees: [
+          { q: -1, r: 0, dir: E, kind: 'bee' }, // flies East into the hornet
+          { q: 1, r: 0, dir: E, kind: 'hornet' },
+        ],
+      }),
+    )
+    const outcome = board.tap(-1, 0)
+    expect(outcome?.kind).toBe('blocked')
+    expect(board.movesUsed).toBe(1)
+    expect(board.remaining).toBe(1)
+  })
+})

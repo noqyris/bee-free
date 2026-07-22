@@ -17,13 +17,15 @@ export enum Direction {
   SE = 5,
 }
 
-/** M1 ships only 'bee'. Later: 'honey', 'wax', 'sleeping', 'queen', 'hornet'. */
-export type OccupantKind = 'bee'
+/**
+ * Occupant kinds. 'bee' and 'queen' are goals (must leave to win); 'hornet' is
+ * a permanent blocker. Deferred: 'honey', 'wax', 'sleeping'.
+ */
+export type OccupantKind = 'bee' | 'queen' | 'hornet'
 
 /**
- * Common contract for everything that can sit in a cell.
- * Obstacles in later milestones implement this same interface so BoardState
- * and the solver never special-case types.
+ * Common contract for everything that can sit in a cell. Obstacles implement
+ * this same interface so BoardState and the solver never special-case types.
  */
 export interface CellOccupant {
   readonly id: number
@@ -35,6 +37,8 @@ export interface CellOccupant {
   isTappable(): boolean
   /** Whether a flying bee is stopped by this occupant. */
   blocksFlight(): boolean
+  /** Whether this occupant must be cleared for the level to be won. */
+  isGoal(): boolean
   clone(): CellOccupant
 }
 

@@ -41,6 +41,8 @@ export class GameScene extends Phaser.Scene {
   private inputLocked = false
   private comboCount = 0
   private lastEscapeAt = -Infinity
+  private previewGfx!: Phaser.GameObjects.Graphics
+  private pending?: { occ: CellOccupant; q: number; r: number }
 
   constructor() {
     super('Game')
@@ -60,15 +62,29 @@ export class GameScene extends Phaser.Scene {
     this.inputLocked = false
     this.comboCount = 0
     this.lastEscapeAt = -Infinity
+    this.pending = undefined
 
     paintBackground(this, this.theme)
     this.layoutBoard()
     this.drawCells()
     this.createEmitters()
-    this.spawnBees()
+    this.previewGfx = this.add.graphics().setDepth(90)
+    this.spawnOccupants()
     this.buildHud()
+    this.showCoach()
 
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this)
+    this.input.on(Phaser.Input.Events.POINTER_UP, this.onPointerUp, this)
+  }
+
+  /** Keep each queen's crown pinned above her sprite through idle and flight. */
+  override update(): void {
+    for (const sprite of this.beeSprites.values()) {
+      const crown = sprite.getData('crown') as Phaser.GameObjects.Image | undefined
+      if (crown && sprite.active) {
+        crown.setPosition(sprite.x, sprite.y - this.cellSize * 0.62)
+      }
+    }
   }
 
   // ── Layout ────────────────────────────────────────────────────────────────
@@ -137,15 +153,46 @@ export class GameScene extends Phaser.Scene {
     this.dustEmitter.setDepth(120)
   }
 
-  private spawnBees(): void {
+  private spawnOccupants(): void {
     this.board.allOccupants().forEach((occ, i) => {
       const { x, y } = this.cellToWorld(occ.q, occ.r)
+
+      if (occ.kind === 'hornet') {
+        const hornet = this.add.sprite(x, y, 'hornet').setScale(0).setDepth(8)
+        this.time.delayedCall(i * juice.spawn.staggerMs, () => {
+          this.tweens.add({
+            targets: hornet,
+            scale: this.beeScale,
+            duration: juice.spawn.popMs,
+            ease: 'Back.easeOut',
+          })
+        })
+        return
+      }
+
       const rot = directionAngle(occ.dir)
-      const sprite = this.add.sprite(x, y, 'bee')
+      const sprite = this.add.sprite(x, y, occ.kind === 'queen' ? 'beeQueen' : 'bee')
       sprite.setRotation(rot)
       sprite.setScale(0)
-      sprite.setDepth(10)
+      sprite.setDepth(occ.kind === 'queen' ? 12 : 10)
       sprite.setData('baseRot', rot)
+
+      if (occ.kind === 'queen') {
+        const crown = this.add
+          .image(x, y - this.cellSize * 0.62, 'crown')
+          .setScale((this.cellSize / 62) * 0.9)
+          .setDepth(13)
+          .setScale(0)
+        sprite.setData('crown', crown)
+        this.tweens.add({
+          targets: crown,
+          scale: (this.cellSize / 62) * 0.9,
+          delay: i * juice.spawn.staggerMs,
+          duration: juice.spawn.popMs,
+          ease: 'Back.easeOut',
+        })
+      }
+
       this.beeSprites.set(occ.id, sprite)
       // The timer handle is kept on the sprite so a tap arriving before the
       // pop fires can cancel it (stopIdle) instead of racing the action tween.
@@ -160,6 +207,36 @@ export class GameScene extends Phaser.Scene {
         })
       })
       sprite.setData('spawnTimer', spawnTimer)
+    })
+  }
+
+  /** One-line contextual coaching for newly introduced mechanics. */
+  private showCoach(): void {
+    const id = this.level.id
+    const kinds = new Set(this.board.allOccupants().map((o) => o.kind))
+    let key: 'coach.tap' | 'coach.queen' | 'coach.hornet' | null = null
+    if (id <= 2) key = 'coach.tap'
+    else if (kinds.has('queen') && id <= 16) key = 'coach.queen'
+    else if (kinds.has('hornet') && id <= 30) key = 'coach.hornet'
+    if (!key) return
+
+    const banner = this.add
+      .text(GAME_WIDTH / 2, layout.movesPillY + 92, t(key), {
+        fontFamily: FONT_STACK,
+        fontSize: '24px',
+        color: this.theme.accentCss,
+        align: 'center',
+        wordWrap: { width: GAME_WIDTH - 120 },
+      })
+      .setOrigin(0.5)
+      .setDepth(200)
+    this.tweens.add({
+      targets: banner,
+      alpha: { from: 0, to: 1 },
+      duration: 260,
+      hold: 4200,
+      yoyo: true,
+      onComplete: () => banner.destroy(),
     })
   }
 
@@ -228,18 +305,34 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
-  // ── Input ─────────────────────────────────────────────────────────────────
+  // ── Input (press to aim, release to fly) ────────────────────────────────────
 
+  private cellAt(pointer: Phaser.Input.Pointer): Axial {
+    return pixelToAxial(pointer.worldX - this.origin.x, pointer.worldY - this.origin.y, this.cellSize)
+  }
+
+  /** Press a tappable occupant → show where it will fly (green safe / red bad). */
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
     if (this.inputLocked || this.board.status !== 'playing') return
-    const cell = pixelToAxial(
-      pointer.worldX - this.origin.x,
-      pointer.worldY - this.origin.y,
-      this.cellSize,
-    )
+    const cell = this.cellAt(pointer)
     const occ = this.board.occupantAt(cell.q, cell.r)
-    if (!occ) return
-    const outcome = this.board.tap(cell.q, cell.r)
+    if (!occ || !occ.isTappable()) return
+    this.pending = { occ, q: cell.q, r: cell.r }
+    this.drawPreview(occ)
+  }
+
+  /** Release on the same occupant → commit the flight. Release elsewhere → cancel. */
+  private onPointerUp(pointer: Phaser.Input.Pointer): void {
+    const pending = this.pending
+    this.pending = undefined
+    this.previewGfx.clear()
+    if (!pending || this.inputLocked || this.board.status !== 'playing') return
+
+    const cell = this.cellAt(pointer)
+    if (cell.q !== pending.q || cell.r !== pending.r) return // released off the bee → cancel
+
+    const occ = pending.occ
+    const outcome = this.board.tap(pending.q, pending.r)
     if (!outcome) return
 
     this.updateMovesHud()
@@ -256,6 +349,58 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.comboCount = 0
       this.animateBump(occ, sprite, outcome)
+    }
+  }
+
+  /** Draw the flight-path preview for a pressed occupant. */
+  private drawPreview(occ: CellOccupant): void {
+    const outcome = this.board.trace(occ)
+    const start = this.cellToWorld(occ.q, occ.r)
+    const { ux, uy } = this.flightUnit(occ)
+    const stepPx = neighborDistance(this.cellSize)
+    const willViolate = occ.kind === 'queen' && this.board.remaining > 1
+    const safe = outcome.kind === 'escaped' && !willViolate
+    const color = safe ? 0x5dff9b : 0xff5a5a
+
+    const dist =
+      outcome.kind === 'escaped'
+        ? stepPx * (outcome.path.length + 1)
+        : stepPx * (outcome.path.length + 1) - stepPx * 0.5
+    const ex = start.x + ux * dist
+    const ey = start.y + uy * dist
+
+    const g = this.previewGfx
+    g.clear()
+    g.lineStyle(Math.max(6, this.cellSize * 0.16), color, 0.85)
+    g.beginPath()
+    g.moveTo(start.x, start.y)
+    g.lineTo(ex, ey)
+    g.strokePath()
+
+    // Arrowhead (safe) or a blocked marker (bad).
+    const head = this.cellSize * 0.34
+    const px = -uy
+    const py = ux
+    g.fillStyle(color, 0.95)
+    if (safe) {
+      g.fillTriangle(
+        ex + ux * head,
+        ey + uy * head,
+        ex - ux * head * 0.4 + px * head * 0.7,
+        ey - uy * head * 0.4 + py * head * 0.7,
+        ex - ux * head * 0.4 - px * head * 0.7,
+        ey - uy * head * 0.4 - py * head * 0.7,
+      )
+    } else {
+      // A cross at the stop point = "blocked / don't".
+      const s = this.cellSize * 0.26
+      g.lineStyle(Math.max(6, this.cellSize * 0.14), color, 0.95)
+      g.beginPath()
+      g.moveTo(ex - s + px * s, ey - s + py * s)
+      g.lineTo(ex + s - px * s, ey + s - py * s)
+      g.moveTo(ex - s - px * s, ey - s - py * s)
+      g.lineTo(ex + s + px * s, ey + s + py * s)
+      g.strokePath()
     }
   }
 
@@ -311,6 +456,8 @@ export class GameScene extends Phaser.Scene {
         // Let in-flight trail particles fade out instead of vanishing.
         trail.stop()
         this.time.delayedCall(juice.flight.trail.fadeOutMs, () => trail.destroy())
+        const crown = sprite.getData('crown') as Phaser.GameObjects.Image | undefined
+        crown?.destroy()
         sprite.destroy()
         this.beeSprites.delete(occ.id)
         this.resolveAfterAction()
@@ -469,6 +616,7 @@ export class GameScene extends Phaser.Scene {
           levelIndex: this.levelIndex,
           chapter: chapterOf(this.level.id),
           beesLeft: this.board.remaining,
+          queenLeftEarly: this.board.queenLeftEarly,
         })
         this.scene.pause()
       })
