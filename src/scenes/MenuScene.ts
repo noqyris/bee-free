@@ -42,14 +42,15 @@ export class MenuScene extends Phaser.Scene {
     this.buildDots()
     this.renderChapter(this.currentChapter)
 
-    // Continue button jumps straight to the next level to play.
+    // Continue button always resumes the player's current level — label it with
+    // that level number so it's clear it isn't "play the chapter you're browsing".
     makeButton(
       this,
       GAME_WIDTH / 2,
       GAME_HEIGHT - 78,
-      t('menu.play'),
+      t('menu.continue', { n: saveManager.currentLevel }),
       () => this.startLevel(saveManager.currentLevel),
-      { width: 360, height: 88, fontSize: 38, accent: theme.accent },
+      { width: 420, height: 88, fontSize: 32, accent: theme.accent },
     ).setDepth(50)
   }
 

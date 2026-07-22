@@ -93,42 +93,41 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   /**
-   * A hornet: a menacing, static blocker. Deliberately a different silhouette
-   * from the bee (dark red, angular wings, angry eyes, NO direction arrow) so
-   * players read it as "wall, can't move" instantly.
+   * A hornet: a permanent, immovable blocker. Drawn as a hard, armored
+   * hexagonal shell with hazard chevrons and rivets — a deliberately non-bee,
+   * "wall / can't move" silhouette (no round body, no wings, no arrow).
    */
   private makeHornetTexture(): void {
     const g = this.make.graphics({}, false)
-    const bodyDark = 0x3a0f0f
-    const bodyRed = 0x8f2b1c
+    const shell = 0x5a1a12
+    const shellDark = 0x2a0a06
+    const edge = 0x120403
+    const hazard = 0xf2b03a
 
-    // Angular wings
-    g.fillStyle(0x6a6a72, 0.85)
-    g.fillTriangle(52, 20, 90, 44, 40, 50)
-    g.fillTriangle(52, 108, 90, 84, 40, 78)
-    g.lineStyle(3, bodyDark, 0.6)
-    g.strokeTriangle(52, 20, 90, 44, 40, 50)
-    g.strokeTriangle(52, 108, 90, 84, 40, 78)
+    // Hard hexagonal armored shell (pointy-top, distinct from the round bee).
+    const shellPts = this.hexPoints(64, 64, 54)
+    g.fillStyle(shell, 1)
+    g.fillPoints(shellPts, true)
+    g.lineStyle(7, edge, 1)
+    g.strokePoints(shellPts, true, true)
+    // Inner bevel
+    g.lineStyle(3, shellDark, 1)
+    g.strokePoints(this.hexPoints(64, 64, 44), true, true)
 
-    // Stinger
-    g.fillStyle(bodyDark, 1)
-    g.fillTriangle(10, 64, 30, 54, 30, 74)
+    // Hazard chevrons across the middle → reads as "danger / barrier".
+    g.lineStyle(9, hazard, 1)
+    for (let i = -1; i <= 1; i++) {
+      const cx = 58 + i * 22
+      g.beginPath()
+      g.moveTo(cx - 10, 46)
+      g.lineTo(cx + 6, 64)
+      g.lineTo(cx - 10, 82)
+      g.strokePath()
+    }
 
-    // Body
-    g.fillStyle(bodyRed, 1)
-    g.fillEllipse(62, 64, 78, 54)
-    g.fillStyle(bodyDark, 1)
-    g.fillRect(48, 40, 10, 48)
-    g.fillRect(66, 40, 10, 48)
-    g.lineStyle(5, 0x1a0808, 1)
-    g.strokeEllipse(62, 64, 78, 54)
-
-    // Head + angry eyes
-    g.fillStyle(bodyDark, 1)
-    g.fillCircle(100, 64, 16)
-    g.fillStyle(0xff5a3c, 1)
-    g.fillTriangle(96, 56, 108, 60, 98, 64)
-    g.fillTriangle(96, 72, 108, 68, 98, 64)
+    // Corner rivets
+    g.fillStyle(shellDark, 1)
+    for (const p of this.hexPoints(64, 64, 40)) g.fillCircle(p.x, p.y, 4.5)
 
     g.generateTexture('hornet', 128, 128)
     g.destroy()
