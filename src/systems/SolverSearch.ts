@@ -54,7 +54,9 @@ export function nextSolvingMove(
 ): { q: number; r: number } | null {
   for (const occ of board.allOccupants()) {
     if (!occ.isTappable()) continue
-    const child = board.clone()
+    // Inflate the probe board's budget so the recursive search is never refused
+    // a tap mid-way by the real (often tight) move budget.
+    const child = board.cloneWithBudget(999)
     const outcome = child.tap(occ.q, occ.r)
     if (!outcome || outcome.kind === 'blocked') continue
     if (child.status === 'lost') continue

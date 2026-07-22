@@ -153,6 +153,9 @@ export function slotFor(id: number): LevelSlot {
   }
 
   bees = clamp(bees, 3, 34)
+  // Honey levels can strand you with a single legal misstep, so give at least a
+  // one-move margin even late in the game (still tight, but not zero-forgiveness).
+  if (honey > 0) slack = Math.max(slack, 1)
   slack = clamp(slack, 0, 4)
   const minDepth = clamp(depth - 1, 0, 14)
   const maxDepth = clamp(depth + 1, minDepth + 1, 16)

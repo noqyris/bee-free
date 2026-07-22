@@ -375,9 +375,11 @@ export class GameScene extends Phaser.Scene {
     const willViolate = occ.kind === 'queen' && this.board.remaining > 1
 
     // green = clean escape, amber = will stick on honey, red = bump / queen early.
+    // Getting stuck is a legal move even for the queen (she stays on the board),
+    // so only an *escaping* queen-with-others-left is painted bad.
     let mode: 'safe' | 'stuck' | 'bad'
-    if (outcome.kind === 'escaped' && !willViolate) mode = 'safe'
-    else if (outcome.kind === 'stuck' && !willViolate) mode = 'stuck'
+    if (outcome.kind === 'stuck') mode = 'stuck'
+    else if (outcome.kind === 'escaped' && !willViolate) mode = 'safe'
     else mode = 'bad'
     const color = mode === 'safe' ? 0x5dff9b : mode === 'stuck' ? 0xffb43a : 0xff5a5a
 

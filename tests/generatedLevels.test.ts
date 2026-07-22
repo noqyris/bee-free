@@ -103,6 +103,19 @@ describe('generated level set', () => {
     })
   }
 
+  it('every honey level actually forces the honey (min moves exceed goal count)', () => {
+    const honeyLevels = LEVELS.filter(hasHoney)
+    expect(honeyLevels.length).toBeGreaterThan(0)
+    for (const level of honeyLevels) {
+      const board = new BoardState({ ...level, moveBudget: 999 })
+      const min = searchMinMoves(board, level.moveBudget)
+      // A bee must get stuck at least once → strictly more taps than goals.
+      expect(min as number).toBeGreaterThan(goalCount(level))
+      // And a one-move margin exists (fairness for a strand-able puzzle).
+      expect(level.moveBudget).toBeGreaterThan(min as number - 1)
+    }
+  })
+
   it('later chapters actually force ordering (depth floor)', () => {
     // Chapters 4-6 should not contain trivially-orderless boards.
     const late = LEVELS.filter((l) => (l.chapter ?? 0) >= 4)

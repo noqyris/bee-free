@@ -147,6 +147,13 @@ export class BoardState {
     return copy
   }
 
+  /** Like clone(), but with an overridden move budget (for unbounded search). */
+  cloneWithBudget(budget: number): BoardState {
+    const copy = this.clone()
+    copy.budget = budget
+    return copy
+  }
+
   /** Canonical key of the current occupant configuration, for solver memoization. */
   stateKey(): string {
     return [...this.occupants.values()]
