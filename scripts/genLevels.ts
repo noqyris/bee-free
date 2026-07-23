@@ -52,6 +52,7 @@ for (const slot of slots) {
     hasQueen: slot.hasQueen,
     hornets: slot.hornets,
     honey: slot.honey,
+    slack: slot.slack,
     seed: slot.seed,
     attempts: slot.attempts,
   })

@@ -1,4 +1,5 @@
 import { BoardState } from './BoardState'
+import { makeRng, mixSeed } from '../utils/rng'
 
 /**
  * Honey breaks the "removing a bee only unblocks" monotonicity (a bee flying
@@ -42,6 +43,36 @@ export function searchMinMoves(start: BoardState, maxMoves: number, cap = 400_00
     depth++
   }
   return null
+}
+
+/**
+ * Fraction of "mindless" playthroughs that LOSE — a proxy for how much a level
+ * punishes careless play (i.e. how much thinking it requires). Careless = tap a
+ * random occupant whose outcome is escape or stick (never a deliberate bump),
+ * ignoring the queen-last rule. A run loses if it strands (only bumps remain),
+ * violates the queen rule, or runs out of moves. `start` must carry the level's
+ * real move budget.
+ */
+export function carelessLossRate(start: BoardState, trials: number, seedBase: number): number {
+  let losses = 0
+  for (let t = 0; t < trials; t++) {
+    const rand = makeRng(mixSeed(seedBase, (t + 1) * 2654435761))
+    const b = start.clone()
+    let won = false
+    for (let s = 0; s < 400; s++) {
+      if (b.remaining === 0) {
+        won = true
+        break
+      }
+      if (b.status !== 'playing') break
+      const opts = b.allOccupants().filter((o) => o.isTappable() && b.trace(o).kind !== 'blocked')
+      if (opts.length === 0) break // stranded: only bump-moves left
+      const o = opts[Math.floor(rand() * opts.length)]
+      b.tap(o.q, o.r)
+    }
+    if (!won) losses++
+  }
+  return losses / trials
 }
 
 /**

@@ -1,7 +1,7 @@
 import { axialKey, DIRECTION_VECTORS } from './HexGrid'
 import { analyzeBoard, type BoardMetrics, type SolverBee } from './Solver'
 import { BoardState } from './BoardState'
-import { searchMinMoves } from './SolverSearch'
+import { searchMinMoves, carelessLossRate } from './SolverSearch'
 import { makeRng, mixSeed, weightedPick, type Rng } from '../utils/rng'
 import type { Cell } from './boardShapes'
 import type { BeeSpec } from '../types'
@@ -116,6 +116,8 @@ export interface GenRequest {
   hornets: number
   hasQueen: boolean
   honey: number
+  /** Move budget above the minimum; used to tune honey trickiness. */
+  slack: number
 }
 
 /** Empty board cells a bee would pass over before it exits or is blocked. */
@@ -139,16 +141,18 @@ function beeRayEmptyCells(
 }
 
 /**
- * Try to place `honeyCount` honey cells on bee rays such that the board stays
- * solvable (verified by full search). Prefers placements that actually add taps
- * (a bee getting stuck), i.e. that make the puzzle deeper. Returns null if no
- * solvable placement is found.
+ * Try to place `honeyCount` honey cells on bee rays. Keeps only solvable
+ * placements, and among those SELECTS FOR TRICKINESS: the placement where
+ * mindless play strands most often (measured against the real budget = minMoves
+ * + slack). This is what turns honey from forced busywork — where careless play
+ * still wins — into a genuine ordering puzzle. Returns null if nothing solvable.
  */
 function addHoney(
   occupants: GenOccupant[],
   boardCells: ReadonlyArray<Cell>,
   boardSet: ReadonlySet<string>,
   honeyCount: number,
+  slack: number,
   seed: number,
 ): { cells: Array<[number, number]>; minMoves: number } | null {
   const occSet = new Set(occupants.map((o) => axialKey(o.q, o.r)))
@@ -165,9 +169,10 @@ function addHoney(
   const beeSpecs: BeeSpec[] = occupants.map((o) => ({ q: o.q, r: o.r, dir: o.dir, kind: o.kind }))
   const rng = makeRng(mixSeed(seed, 0x0f0f0f))
   const searchMax = goals * 2 + 8
-  let fallback: { cells: Array<[number, number]>; minMoves: number } | null = null
 
-  for (let t = 0; t < 40; t++) {
+  let best: { cells: Array<[number, number]>; minMoves: number; trick: number } | null = null
+
+  for (let t = 0; t < 60; t++) {
     const pool = [...candidates]
     const chosen: Array<[number, number]> = []
     for (let i = 0; i < honeyCount && pool.length > 0; i++) {
@@ -176,7 +181,7 @@ function addHoney(
       const [q, r] = k.split(',').map(Number)
       chosen.push([q, r])
     }
-    const board = new BoardState({
+    const searchBoard = new BoardState({
       id: 0,
       cells: cellsList,
       honeyCells: chosen,
@@ -184,12 +189,25 @@ function addHoney(
       moveBudget: 999,
       threeStarSpare: 0,
     })
-    const m = searchMinMoves(board, searchMax)
-    if (m === null) continue
-    if (m > goals) return { cells: chosen, minMoves: m } // honey actually triggered → keep
-    if (!fallback) fallback = { cells: chosen, minMoves: m }
+    const m = searchMinMoves(searchBoard, searchMax)
+    if (m === null || m <= goals) continue // unsolvable or honey never triggers
+
+    // Measure how much this placement punishes careless play, at the real budget.
+    const realBoard = new BoardState({
+      id: 0,
+      cells: cellsList,
+      honeyCells: chosen,
+      bees: beeSpecs,
+      moveBudget: m + slack,
+      threeStarSpare: 0,
+    })
+    const trick = carelessLossRate(realBoard, 24, mixSeed(seed, t + 1))
+
+    if (!best || trick > best.trick) best = { cells: chosen, minMoves: m, trick }
+    if (best.trick >= 0.6) break // tricky enough — stop early
   }
-  return fallback
+
+  return best ? { cells: best.cells, minMoves: best.minMoves } : null
 }
 
 export function generateLevel(req: GenRequest): GenBoard {
@@ -238,9 +256,10 @@ export function generateLevel(req: GenRequest): GenBoard {
     best = { occupants: bees, metrics, honeyCells: [], minMoves: metrics.beeCount }
   }
 
-  // Honey (validated by full search — it breaks greedy monotonicity).
+  // Honey (validated by full search — it breaks greedy monotonicity — and
+  // selected for trickiness so it demands planning, not busywork).
   if (req.honey > 0) {
-    const added = addHoney(best.occupants, req.boardCells, boardSet, req.honey, req.seed)
+    const added = addHoney(best.occupants, req.boardCells, boardSet, req.honey, req.slack, req.seed)
     if (added) {
       best.honeyCells = added.cells
       best.minMoves = added.minMoves

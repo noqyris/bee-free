@@ -112,6 +112,7 @@ describe('LevelGenerator', () => {
     hornets: 0,
     hasQueen: false,
     honey: 0,
+    slack: 2,
   }
 
   it('is deterministic for a fixed seed', () => {

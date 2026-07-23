@@ -129,25 +129,28 @@ export function slotFor(id: number): LevelSlot {
     slack = Math.max(slack, 2)
   }
 
-  // Obstacles (decided before the depth band / budget so those stay consistent):
-  //  - Queen (must leave last) from L12 on ~a third of levels.
-  //  - Hornets (permanent walls) ramping in from L22.
-  let hasQueen = id >= 12 && (id % 3 === 0 || isSpike)
+  // Honey is the strategic core: a bee flying through honey gets STUCK and
+  // becomes a blocker, which breaks greedy-monotonicity so ORDER matters and a
+  // legal move can strand you. Without it a level is solvable by mindless
+  // "tap any clear bee", so honey is on ~2 of every 3 levels from L14. The
+  // remaining ~1/3 (id % 3 == 0) are the queen levels — so almost every level
+  // needs real thought (plan the honey order, or save the queen for last).
+  let honey = 0
+  if (id >= 14 && id % 3 !== 0) honey = id >= 45 ? 2 : 1
+
+  // Queen (must leave last) on the non-honey third from L12.
+  let hasQueen = id >= 12 && id % 3 === 0
+  // Hornets (permanent walls) layer onto either.
   let hornets = 0
   if (id >= 22) hornets = 1
-  if (id >= 60) hornets = 2
-  if (id >= 110) hornets = 3
-  if (isBreather) hornets = Math.max(0, hornets - 1) // ease off on relief levels
+  if (id >= 70) hornets = 2
+  if (id >= 120) hornets = 3
+  if (isBreather) hornets = Math.max(0, hornets - 1)
 
-  // Honey "puzzle" levels (every 5th from L40): a bee flying through honey gets
-  // stuck, breaking greedy-monotonicity and forcing real ordering. Kept small
-  // and free of queen/hornets so the search validator stays fast and the
-  // strategic mechanic reads clearly.
-  let honey = 0
-  if (id >= 40 && id % 5 === 0) {
-    honey = id >= 100 ? 2 : 1
-    bees = Math.min(bees, 9)
-    hornets = 0
+  if (honey > 0) {
+    // Cap bees so the full-search validator stays fast; drop the queen so the
+    // honey ordering puzzle reads clearly. Hornets may still layer on.
+    bees = Math.min(bees, 14)
     hasQueen = false
     depth = Math.max(depth, 2)
   }
