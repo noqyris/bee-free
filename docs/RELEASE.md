@@ -127,9 +127,35 @@ in the web UI: Apps → **+** → New App, with bundle id `com.beefree.hiveescap
 Levels are static JSON generated offline, never at runtime:
 
 ```bash
-npm run gen:levels   # regenerate all 150 (~26s, sharded across cores)
-npm run difficulty   # profile the shipped curve
+npm run gen:levels             # regenerate all 150 (~110s, sharded across cores)
+npx tsx scripts/humanDifficulty.ts   # the metric that matters (see below)
+npx tsx scripts/difficulty.ts        # legacy random-play profile, kept for contrast
 ```
 
 `npm run gen:levels` fails the build if any level is unsolvable, over budget, or
-misses its careless-loss floor. See `src/config/levelCurve.ts` for the schedule.
+misses its planning floor. See `src/config/levelCurve.ts` for the schedule.
+
+### Measure planning pressure, not careless-loss
+
+The curve is tuned against **smart-greedy loss**: how often a bot that plays
+competently but does *not* search ahead still loses. It never bumps, never frees
+the queen early, and prefers a clean escape over gluing a bee into honey.
+
+Do **not** tune against careless (random) play. That was the original target and
+it was actively misleading: on a honey-free board "tap any clear bee, queen
+last" always wins — removing a bee only ever unblocks others — yet random play
+loses ~96% there. 117 of 150 levels scored as brutal and played as free.
+
+Practical consequences for anyone re-tuning:
+
+- **Honey is the difficulty.** It is the only mechanic that breaks monotonicity,
+  so a legal-looking move can strand you. More honey cells, denser board and
+  tighter `slack` are the levers that work.
+- **The queen is nearly free.** She is blocked at the start on 136 of 137 queen
+  levels, so her "leaves early = loss" trap almost never fires. She is kept as an
+  ordering constraint, not as a difficulty source.
+- **Bee count must keep rising.** It is capped because the BFS validator is
+  exponential-ish in goal count; with the cap pinned at 12, chapters 5 and 6 came
+  out identical. It now ramps to 16.
+- **Prefer the smallest adequate board.** A sparse board is easier to plan on,
+  not harder.
