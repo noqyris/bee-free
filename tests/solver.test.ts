@@ -113,6 +113,7 @@ describe('LevelGenerator', () => {
     hasQueen: false,
     honey: 0,
     slack: 2,
+    carelessFloor: 0,
   }
 
   it('is deterministic for a fixed seed', () => {

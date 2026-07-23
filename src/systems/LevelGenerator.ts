@@ -30,6 +30,12 @@ export interface GenBoard {
   /** Minimum taps to clear all goals (accounts for honey detours). */
   minMoves: number
   metrics: BoardMetrics
+  /**
+   * Measured fraction of mindless playthroughs that LOSE at the real budget —
+   * the ground-truth "how much thinking does this level demand?" signal, used
+   * to enforce the rising difficulty floor.
+   */
+  carelessLoss: number
 }
 
 /** In-board ray length from (q,r) along dir, or -1 if a placed occupant blocks it. */
@@ -118,6 +124,8 @@ export interface GenRequest {
   honey: number
   /** Move budget above the minimum; used to tune honey trickiness. */
   slack: number
+  /** Minimum careless-loss the board should reach; honey placement targets it. */
+  carelessFloor: number
 }
 
 /** Empty board cells a bee would pass over before it exits or is blocked. */
@@ -153,8 +161,9 @@ function addHoney(
   boardSet: ReadonlySet<string>,
   honeyCount: number,
   slack: number,
+  carelessFloor: number,
   seed: number,
-): { cells: Array<[number, number]>; minMoves: number } | null {
+): { cells: Array<[number, number]>; minMoves: number; trick: number } | null {
   const occSet = new Set(occupants.map((o) => axialKey(o.q, o.r)))
   const goals = occupants.filter((o) => o.kind !== 'hornet').length
   const candSet = new Set<string>()
@@ -170,9 +179,14 @@ function addHoney(
   const rng = makeRng(mixSeed(seed, 0x0f0f0f))
   const searchMax = goals * 2 + 8
 
+  // Aim to clear the level's rising trap floor; keep searching (up to a bigger
+  // budget when the floor is high) for the trickiest solvable placement.
+  const target = Math.max(0.6, carelessFloor)
+  const maxTries = carelessFloor >= 0.6 ? 100 : 60
+
   let best: { cells: Array<[number, number]>; minMoves: number; trick: number } | null = null
 
-  for (let t = 0; t < 60; t++) {
+  for (let t = 0; t < maxTries; t++) {
     const pool = [...candidates]
     const chosen: Array<[number, number]> = []
     for (let i = 0; i < honeyCount && pool.length > 0; i++) {
@@ -201,26 +215,28 @@ function addHoney(
       moveBudget: m + slack,
       threeStarSpare: 0,
     })
-    const trick = carelessLossRate(realBoard, 24, mixSeed(seed, t + 1))
+    const trick = carelessLossRate(realBoard, 32, mixSeed(seed, t + 1))
 
     if (!best || trick > best.trick) best = { cells: chosen, minMoves: m, trick }
-    if (best.trick >= 0.6) break // tricky enough — stop early
+    if (best.trick >= target) break // meets the floor with margin — stop early
   }
 
-  return best ? { cells: best.cells, minMoves: best.minMoves } : null
+  return best
 }
 
-export function generateLevel(req: GenRequest): GenBoard {
-  const boardSet = new Set<string>()
-  for (const [q, r] of req.boardCells) boardSet.add(axialKey(q, r))
-  const boardCells = req.boardCells.length
+/** Build one solvability-guaranteed board (bees + optional queen/hornets), no honey. */
+function buildStructural(
+  req: GenRequest,
+  boardSet: ReadonlySet<string>,
+  boardCells: number,
+  baseSeed: number,
+): GenBoard {
   const depthMid = (req.minDepth + req.maxDepth) / 2
-
   let best: GenBoard | null = null
   let bestScore = Infinity
 
   for (let attempt = 0; attempt < req.attempts; attempt++) {
-    const rng = makeRng(mixSeed(req.seed, attempt))
+    const rng = makeRng(mixSeed(baseSeed, attempt))
     const hornetKeys = pickHornetCells(req.boardCells, req.hornets, rng)
     const bees = placeBees(req.boardCells, boardSet, hornetKeys, req.targetBees, req.rayBias, rng)
 
@@ -243,27 +259,80 @@ export function generateLevel(req: GenRequest): GenBoard {
       beeShort * 50 + (inBand ? 0 : 20) + Math.abs(metrics.depDepth - depthMid) + queenMissing + hornetShort
 
     if (score < bestScore) {
-      best = { occupants, metrics, honeyCells: [], minMoves: metrics.beeCount }
+      best = { occupants, metrics, honeyCells: [], minMoves: metrics.beeCount, carelessLoss: 0 }
       bestScore = score
       if (inBand && beeShort === 0 && queenMissing === 0 && hornetShort === 0) break
     }
   }
 
   if (!best) {
-    const rng = makeRng(req.seed)
+    const rng = makeRng(baseSeed)
     const bees = placeBees(req.boardCells, boardSet, new Set(), req.targetBees, req.rayBias, rng)
     const metrics = analyzeBoard(bees, boardSet, boardCells)
-    best = { occupants: bees, metrics, honeyCells: [], minMoves: metrics.beeCount }
-  }
-
-  // Honey (validated by full search — it breaks greedy monotonicity — and
-  // selected for trickiness so it demands planning, not busywork).
-  if (req.honey > 0) {
-    const added = addHoney(best.occupants, req.boardCells, boardSet, req.honey, req.slack, req.seed)
-    if (added) {
-      best.honeyCells = added.cells
-      best.minMoves = added.minMoves
-    }
+    best = { occupants: bees, metrics, honeyCells: [], minMoves: metrics.beeCount, carelessLoss: 0 }
   }
   return best
+}
+
+/** Careless-loss of a finished board at its real budget (the difficulty signal). */
+function measureCareless(
+  req: GenRequest,
+  board: GenBoard,
+  seed: number,
+): number {
+  const realBoard = new BoardState({
+    id: 0,
+    cells: req.boardCells.map((c) => [c[0], c[1]] as [number, number]),
+    honeyCells: board.honeyCells,
+    bees: board.occupants.map((o) => ({ q: o.q, r: o.r, dir: o.dir, kind: o.kind })),
+    moveBudget: board.minMoves + req.slack,
+    threeStarSpare: 0,
+  })
+  return carelessLossRate(realBoard, 80, mixSeed(seed, 0xbeef))
+}
+
+export function generateLevel(req: GenRequest): GenBoard {
+  const boardSet = new Set<string>()
+  for (const [q, r] of req.boardCells) boardSet.add(axialKey(q, r))
+  const boardCells = req.boardCells.length
+
+  // A single board layout can happen to leave the queen buried or the honey
+  // toothless (careless play sails through). So we RESTART with fresh layouts,
+  // measure the ground-truth careless-loss of each, and keep the board that best
+  // punishes mindless play — stopping as soon as one clears the level's floor
+  // with margin. Plain tutorial boards need no such search.
+  // Honey-only boards bite only on a lucky-enough layout, so give them the most
+  // restarts; honey+queen and queen-only land reliably with a few.
+  const restarts = req.honey > 0 ? (req.hasQueen ? 6 : 14) : req.hasQueen ? 4 : 1
+  const stopAt = Math.max(0.6, req.carelessFloor + 0.05)
+
+  let best: GenBoard | null = null
+  for (let s = 0; s < restarts; s++) {
+    const seed = mixSeed(req.seed, s * 0x9e3779b1)
+    const board = buildStructural(req, boardSet, boardCells, seed)
+
+    // Honey: validated by full search (it breaks greedy monotonicity) and placed
+    // to target the level's rising careless-loss floor.
+    if (req.honey > 0) {
+      const added = addHoney(
+        board.occupants,
+        req.boardCells,
+        boardSet,
+        req.honey,
+        req.slack,
+        req.carelessFloor,
+        seed,
+      )
+      if (added) {
+        board.honeyCells = added.cells
+        board.minMoves = added.minMoves
+      }
+    }
+
+    board.carelessLoss = measureCareless(req, board, seed)
+    if (!best || board.carelessLoss > best.carelessLoss) best = board
+    if (best.carelessLoss >= stopAt) break
+  }
+
+  return best as GenBoard
 }
