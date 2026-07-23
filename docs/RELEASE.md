@@ -33,6 +33,26 @@ Pacing lives in `ADS` in `src/config/monetization.ts`: no interstitials before
 level 6, then one every 3rd level result with a 90s cooldown. Ads never show for
 a player who bought "remove ads".
 
+### AdMob app verification ("require review" / app-ads.txt)
+
+Before AdMob serves at full demand it VERIFIES the app. Two things gate that:
+
+1. **app-ads.txt** — Google's authorized-sellers file. Host `store/app-ads.txt`
+   (with the real `pub-…` id filled in) at the ROOT of the developer-website
+   domain set as the app's Marketing URL in App Store Connect, e.g.
+   `https://<domain>/app-ads.txt`. AdMob derives the domain from the store
+   listing and crawls it; until it matches, the console shows
+   "app-ads.txt not found" and the app stays unverified (suppressed demand). The
+   file is web-hosted, NOT bundled in the app.
+2. **SKAdNetworkItems** — `ios/App/App/Info.plist` carries Google's full list of
+   50 SKAdNetwork ids (from developers.google.com/admob/ios/3p-skadnetworks) so
+   iOS 14+ install attribution works. Refresh the list if Google publishes more,
+   or when adding mediation partners (each partner appends its own ids).
+
+AdMob also has its own app-review/approval pass on the AdMob side once the app is
+live on the App Store; keep `USE_TEST_ADS = true` until that clears, so no real
+impressions are logged against an unreviewed build.
+
 ## 3. In-app purchase (BLOCKER for the store button)
 
 The app sells one non-consumable via our own StoreKit 2 bridge

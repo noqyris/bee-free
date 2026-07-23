@@ -74,7 +74,7 @@ export const REVIEW = {
 
 /**
  * Numeric App Store id (the digits in the app's store URL). Only needed to open
- * the store listing directly; fill it in once the app record exists in App Store
- * Connect. The in-app review prompt works without it.
+ * the store listing directly for a deliberate "rate us" tap; the in-app review
+ * prompt works without it. This is the app record created in App Store Connect.
  */
-export const APP_STORE_ID = ''
+export const APP_STORE_ID: string = '6793947665'

@@ -1,0 +1,26 @@
+# app-ads.txt — Authorized Sellers for Apps (IAB spec)
+#
+# This file authorizes Google/AdMob to sell ad inventory for Bee Free and is how
+# AdMob VERIFIES the app. Until it is hosted and crawled, the AdMob console shows
+# "app-ads.txt not found" and the app stays unverified — which suppresses bidder
+# demand (many buyers refuse unverified inventory). It is not shipped inside the
+# app; it must be HOSTED ON A WEBSITE.
+#
+# ── Where it must live ────────────────────────────────────────────────────────
+# At the ROOT of the developer-website domain listed on the App Store product
+# page (App Store Connect → App Information → "Marketing URL", or the developer
+# URL under the seller name). If the marketing URL is https://beefree.app, then
+# the file must resolve at exactly:  https://beefree.app/app-ads.txt
+# AdMob's crawler derives the domain from that store listing, so the URL in App
+# Store Connect and the host of this file must match.
+#
+# ── What to put below ─────────────────────────────────────────────────────────
+# Replace pub-0000000000000000 with the real AdMob publisher id (AdMob console →
+# Settings → "Publisher ID", format pub-XXXXXXXXXXXXXXXX). The last field is
+# Google's fixed certification-authority id and never changes.
+#
+# One DIRECT line per network. With only AdMob (no mediation) a single line is
+# enough; each mediation partner would add its own line, copied from that
+# partner's app-ads.txt instructions.
+
+google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
