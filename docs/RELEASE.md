@@ -95,6 +95,15 @@ xcrun altool --upload-app -f ./build/ipa/App.ipa -t ios \
   --apiKey 87V9QK9CTV --apiIssuer fb67d5b5-b55b-4fb1-b5c3-acf16cbccdda
 ```
 
+### Gotchas hit in practice
+
+- **Error 90474 — iPad multitasking.** A portrait-only app is rejected unless
+  `UISupportedInterfaceOrientations~ipad` lists all four orientations. iPhone
+  stays portrait-locked; only the iPad key needs all four (Phaser's FIT scale
+  letterboxes cleanly). The alternative is going iPhone-only via
+  `TARGETED_DEVICE_FAMILY = 1`.
+- **Duplicate build numbers** are rejected outright — bump before every upload.
+
 Bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the Xcode project for
 every upload — App Store Connect rejects a duplicate build number.
 

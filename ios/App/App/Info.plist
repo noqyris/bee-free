@@ -36,9 +36,16 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<!-- iPhone stays portrait-locked (the board is designed 720x1280), but iPad
+	     must declare all four orientations or App Store Connect rejects the
+	     build for not supporting iPad multitasking (error 90474). Phaser's FIT
+	     scale mode letterboxes cleanly in landscape. -->
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
