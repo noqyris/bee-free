@@ -49,6 +49,11 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- The game uses no encryption beyond standard HTTPS, so it is exempt.
+	     Declaring it here stops TestFlight from blocking every build on the
+	     "Missing Compliance" export-compliance question. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<!-- AdMob application id. Must match AD_UNITS.appId in src/config/monetization.ts;
 	     this is currently Google's public TEST app id (see USE_TEST_ADS). -->
 	<key>GADApplicationIdentifier</key>
