@@ -17,7 +17,7 @@ import { paintBackground } from '../utils/background'
 import { difficultyDirector } from '../systems/DifficultyDirector'
 import { saveManager } from '../systems/SaveManager'
 import { t } from '../i18n'
-import { makeIconButton, FONT_STACK } from '../utils/ui'
+import { makeIconButton, makeRestartButton, FONT_STACK } from '../utils/ui'
 
 interface GameSceneData {
   levelIndex?: number
@@ -293,13 +293,13 @@ export class GameScene extends Phaser.Scene {
       .setDepth(200)
 
     makeIconButton(this, 66, layout.hudTopY, '‹', () => this.scene.start('Menu'), 34).setDepth(200)
-    makeIconButton(
+    makeRestartButton(
       this,
       GAME_WIDTH - 66,
       layout.hudTopY,
-      '↻',
       () => this.scene.restart({ levelIndex: this.levelIndex }),
       34,
+      this.theme.accent,
     ).setDepth(200)
   }
 

@@ -81,6 +81,19 @@ export function makeButton(
 }
 
 /** Circular icon button (back, restart, etc.). */
+/** Shared chrome for the round icon buttons: drop shadow, body, gloss, rim. */
+function drawIconButtonBody(g: Phaser.GameObjects.Graphics, radius: number, accent?: number): void {
+  g.fillStyle(0x000000, 0.3)
+  g.fillCircle(0, 6, radius)
+  g.fillStyle(colors.buttonSecondary, 1)
+  g.fillCircle(0, 0, radius)
+  // Gloss: a soft highlight in the upper half reads as a raised surface.
+  g.fillStyle(0xffffff, 0.12)
+  g.fillCircle(0, -radius * 0.34, radius * 0.74)
+  g.lineStyle(2, accent ?? 0xffffff, accent ? 0.55 : 0.16)
+  g.strokeCircle(0, 0, radius - 1)
+}
+
 export function makeIconButton(
   scene: Phaser.Scene,
   x: number,
@@ -88,14 +101,10 @@ export function makeIconButton(
   glyph: string,
   onTap: () => void,
   radius = 34,
+  accent?: number,
 ): Phaser.GameObjects.Container {
   const g = scene.add.graphics()
-  g.fillStyle(0x000000, 0.28)
-  g.fillCircle(0, 5, radius)
-  g.fillStyle(colors.buttonSecondary, 1)
-  g.fillCircle(0, 0, radius)
-  g.fillStyle(0xffffff, 0.1)
-  g.fillCircle(0, -radius * 0.35, radius * 0.72)
+  drawIconButtonBody(g, radius, accent)
 
   const text = scene.add
     .text(0, -1, glyph, {
@@ -115,6 +124,56 @@ export function makeIconButton(
   )
   container.on('pointerup', () => {
     scene.tweens.add({ targets: container, scale: 1, duration: 60 })
+    onTap()
+  })
+  container.on('pointerout', () => scene.tweens.add({ targets: container, scale: 1, duration: 60 }))
+  return container
+}
+
+/**
+ * Restart button. The icon is drawn rather than typed: the "↻" glyph renders
+ * inconsistently across iOS font fallbacks (and sat visibly off-centre on
+ * device), whereas an arc plus a triangular head is identical everywhere and
+ * can spin on press.
+ */
+export function makeRestartButton(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  onTap: () => void,
+  radius = 34,
+  accent = 0xffc94d,
+): Phaser.GameObjects.Container {
+  const g = scene.add.graphics()
+  drawIconButtonBody(g, radius, accent)
+
+  // The rotating part lives in its own graphics so the body stays put.
+  const icon = scene.add.graphics()
+  const r = radius * 0.46
+  icon.lineStyle(Math.max(3, radius * 0.11), 0xffffff, 0.95)
+  // Open arc, leaving a gap where the arrow head goes.
+  icon.beginPath()
+  icon.arc(0, 0, r, Phaser.Math.DegToRad(-40), Phaser.Math.DegToRad(230), false)
+  icon.strokePath()
+  // Arrow head at the arc's open end, pointing along the sweep.
+  const headAngle = Phaser.Math.DegToRad(-40)
+  const hx = Math.cos(headAngle) * r
+  const hy = Math.sin(headAngle) * r
+  const s = radius * 0.2
+  icon.fillStyle(0xffffff, 0.95)
+  icon.fillTriangle(hx + s, hy, hx - s * 0.45, hy - s * 0.9, hx - s * 0.45, hy + s * 0.9)
+
+  const container = scene.add.container(x, y, [g, icon])
+  container.setSize(radius * 2, radius * 2)
+  container.setInteractive({ useHandCursor: true })
+  container.on('pointerdown', () =>
+    scene.tweens.add({ targets: container, scale: 0.9, duration: 60 }),
+  )
+  container.on('pointerup', () => {
+    scene.tweens.add({ targets: container, scale: 1, duration: 60 })
+    // Spin the icon so the restart reads as an action, not just a tap.
+    icon.angle = 0
+    scene.tweens.add({ targets: icon, angle: 360, duration: 420, ease: 'Cubic.easeOut' })
     onTap()
   })
   container.on('pointerout', () => scene.tweens.add({ targets: container, scale: 1, duration: 60 }))

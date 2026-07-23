@@ -23,7 +23,7 @@ export interface LevelSlot {
    * to win" floor. Rises monotonically with id so each level punishes mindless
    * play at least as much as the ones before it. 0 during the tutorial.
    */
-  carelessFloor: number
+  planningFloor: number
   seed: number
   attempts: number
 }
@@ -86,13 +86,24 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
 
-/** Pick a shape from the chapter pool big enough for the bee count. */
+/**
+ * Pick a shape from the chapter pool big enough for the bee count — preferring
+ * the SMALLEST adequate one.
+ *
+ * Picking freely among all big-enough shapes made late chapters sprawl: bee
+ * count is capped at 12 on honey boards, so a radius-5 hexagon left the board
+ * mostly empty, and a sparse board is easier to plan on, not harder. Choosing
+ * tight keeps the density (and the difficulty) up. The rotor still varies the
+ * look by alternating between the two smallest adequate shapes.
+ */
 function chooseShape(chapter: number, neededCapacity: number, rotor: number): ShapeSpec {
   const pool = SHAPE_POOLS[chapter - 1]
-  const big = pool.filter((s) => shapeCapacity(s) >= neededCapacity)
+  const big = pool
+    .filter((s) => shapeCapacity(s) >= neededCapacity)
+    .sort((a, b) => shapeCapacity(a) - shapeCapacity(b))
   const options =
     big.length > 0
-      ? big
+      ? big.slice(0, 2)
       : [pool.reduce((a, b) => (shapeCapacity(b) > shapeCapacity(a) ? b : a))]
   return options[rotor % options.length]
 }
@@ -114,37 +125,36 @@ export function slotFor(id: number): LevelSlot {
   // Ray bias: long rays cross more bees → fewer "free at start" bees, harder scan.
   const rayBias = lerp(2.3, 3.7, p)
 
-  // --- Axis 2: TRAP DENSITY (how much mindless play is punished) ---
-  // A monotone floor on careless-loss = the "you must think to win" guarantee.
-  // Data (scripts/probe.ts): honey ALONE tops out ~45% careless-loss (and only
-  // on dense boards); the QUEEN (must-leave-last) reliably drives it to ~95%.
-  // So the queen is the difficulty spine; honey stacks on top for planning
-  // depth. The teaching bands (honey, then queen) carry gentler floors.
-  // Honey ALONE can't guarantee a floor, so its teaching band (L7–13) carries
-  // none — it just introduces the mechanic. The floor turns on at L14 with the
-  // queen, then climbs monotonically to the endgame.
-  let carelessFloor: number
-  if (id <= 13) carelessFloor = 0
-  else if (id <= 19) carelessFloor = lerp(0.4, 0.48, (id - 14) / 5) // queen-teach
-  else carelessFloor = clamp(lerp(0.55, 0.88, (id - 20) / (LEVEL_COUNT - 20)), 0.5, 0.9)
+  // --- Axis 2: PLANNING PRESSURE (does a competent player have to think?) ---
+  // Measured as smart-greedy loss: how often play that never bumps, never frees
+  // the queen early, and prefers a clean escape STILL fails for want of a plan.
+  //
+  // This replaced an earlier careless-loss (random-play) target, which was
+  // measuring the wrong thing: on a honey-free board "tap any clear bee, queen
+  // last" always wins, so those levels scored ~96% and played as free. Honey is
+  // the only mechanic that breaks that monotonicity — a legal move can strand
+  // you — so honey, not the queen, is what carries difficulty here.
+  let planningFloor: number
+  if (id <= 13) planningFloor = 0 // teaching band: mechanics introduced, no pressure
+  else planningFloor = clamp(lerp(0.2, 0.62, (id - 14) / (LEVEL_COUNT - 14)), 0.15, 0.7)
 
-  // --- Mechanic schedule: teach each in isolation, then stack forever ---
+  // --- Mechanic schedule ---
   // honey  = a bee flying through it gets STUCK and becomes a blocker → order
-  //          matters, a legal move can strand you (breaks greedy-monotonicity).
-  // queen  = a goal that must leave LAST — the reliable think-or-lose spine.
+  //          matters and a legal move can strand you. THE difficulty mechanic.
+  // queen  = must leave LAST. Free on its own, but it constrains honey ordering,
+  //          so it is spice on top of honey rather than the main course.
   // hornet = a permanent wall.
-  //   L4–13  honey solo (learn honey)
-  //   L14–19 queen solo (learn the queen)
-  //   L20+   honey + queen together, the deep puzzle, on every level
   let honey = 0
   let hasQueen = false
   let hornets = 0
 
+  // Honey density is the primary ramp — more cells, more ways to strand.
   if (id >= 4) honey = 1
-  if (id >= 51) honey = 2
-  if (id >= 126) honey = 3
+  if (id >= 20) honey = 2
+  if (id >= 55) honey = 3
+  if (id >= 100) honey = 4
   if (id >= 14) hasQueen = true
-  if (id >= 14 && id <= 19) honey = 0 // queen taught solo in her intro band
+  if (id >= 14 && id <= 19) honey = 1 // queen introduced, honey stays on
 
   // Hornet walls layer on from L30, more as the game goes.
   if (id >= 30) hornets = 1
@@ -165,42 +175,37 @@ export function slotFor(id: number): LevelSlot {
     hasQueen = false
   }
 
-  // Showcase spikes every 10th level from L40: a BIG scan-and-nerve board —
-  // many bees, queen-last, tight budget, no honey. A different flavour of hard
-  // (breadth + budget pressure) that ramps raw bee-count load, interleaved with
-  // the deep honey+queen ordering puzzles.
-  if (isSpike && id >= 40) {
-    honey = 0
-    hasQueen = true
-    bees = clamp(Math.round(lerp(18, 34, p)) + 2, 16, 34)
+  // Spikes every 10th level: an extra honey cell and a tighter budget. (An
+  // earlier design made spikes big honey-FREE boards; those turned out to be
+  // free wins for anyone who knows the rules, however many bees they held.)
+  if (isSpike && id >= 20) {
+    honey += 1
     depth += 1
+    slack = Math.max(0, slack - 1)
   } else if (isSpike) {
-    bees += 3
+    bees += 2
     depth += 1
   } else if (isBreather && id > 6) {
-    // Ease the LOAD after a spike, but keep the mechanics (and thus the trap
-    // floor) — a breather is a lighter board, never a mindless one.
+    // Ease the LOAD after a spike, but keep the mechanics — a breather is a
+    // lighter board, never a free one.
     bees = Math.max(4, bees - 3)
     depth = Math.max(1, depth - 1)
     slack += 1
     hornets = Math.max(0, hornets - 1)
   }
 
-  // Honey-only (no queen): careless-loss comes only from stranding deadlocks,
-  // which need a DENSE board — so pack bees in and keep the budget tight.
-  const honeyOnly = honey > 0 && !hasQueen
-  if (honeyOnly && id > 6) {
-    bees = clamp(Math.max(bees, 10), 3, 14)
-    slack = Math.min(slack, 1)
-  }
-
-  // Honey boards drive a full BFS validator, so cap the bee count to keep it
-  // fast — tighter when a queen is also present (the heaviest search). A honey
-  // misstep can strand you, so honey+queen keeps at least a one-move margin.
-  if (honey > 0) {
+  // Honey needs a reasonably packed board to be able to strand anyone, and a
+  // tight budget so a wasted detour actually costs the level.
+  //
+  // The bee cap exists because the BFS validator is exponential-ish in goal
+  // count, but it must keep rising or the endgame runs out of ramp: with bees
+  // pinned at 12, chapters 5 and 6 came out identical. Generation is ~26s
+  // sharded across cores, so there is headroom to let it grow.
+  if (honey > 0 && id > 6) {
     depth = Math.max(depth, 2)
-    bees = Math.min(bees, hasQueen ? 12 : 14)
-    if (hasQueen) slack = Math.max(slack, 1)
+    const cap = id >= 110 ? 16 : id >= 75 ? 14 : 12
+    bees = clamp(Math.max(bees, 8), 3, hasQueen ? cap : cap + 2)
+    slack = Math.min(slack, id >= 100 ? 0 : id >= 30 ? 1 : 2)
   }
 
   bees = clamp(bees, 3, 34)
@@ -214,7 +219,8 @@ export function slotFor(id: number): LevelSlot {
 
   // Honey-only boards need to be DENSE to bite; honey+queen needs a little room;
   // plain boards are loosest.
-  const fillTarget = honeyOnly ? 0.62 : honey > 0 ? 0.5 : 0.46
+  // Honey boards are packed tighter: stranding needs neighbours to strand into.
+  const fillTarget = honey > 0 ? (hasQueen ? 0.54 : 0.62) : 0.46
   const neededCapacity = Math.ceil((bees + hornets) / fillTarget)
   const shape = chooseShape(chapter, neededCapacity, id)
 
@@ -231,7 +237,7 @@ export function slotFor(id: number): LevelSlot {
     hasQueen,
     hornets,
     honey,
-    carelessFloor,
+    planningFloor,
     seed: (1000 + id * 7919) >>> 0,
     attempts: 500,
   }

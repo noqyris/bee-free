@@ -44,16 +44,16 @@ interface OutLevel {
   hasQueen: boolean
   minMoves: number
   /** Measured careless-loss (fraction of mindless plays that lose). */
-  carelessLoss: number
+  planningLoss: number
   /** The floor this level was required to clear (for the tuning report). */
-  carelessFloor: number
+  planningFloor: number
 }
 
 /** Generate a single level from its curve slot, returning the level + any hard failures. */
 function genOne(slot: LevelSlot): { level: OutLevel; failures: string[] } {
   const failures: string[] = []
   const cells = shapeCells(slot.shape)
-  const { occupants, honeyCells, minMoves, metrics, carelessLoss } = generateLevel({
+  const { occupants, honeyCells, minMoves, metrics, planningLoss } = generateLevel({
     boardCells: cells,
     targetBees: slot.targetBees,
     minDepth: slot.minDepth,
@@ -63,7 +63,7 @@ function genOne(slot: LevelSlot): { level: OutLevel; failures: string[] } {
     hornets: slot.hornets,
     honey: slot.honey,
     slack: slot.slack,
-    carelessFloor: slot.carelessFloor,
+    planningFloor: slot.planningFloor,
     seed: slot.seed,
     attempts: slot.attempts,
   })
@@ -96,8 +96,8 @@ function genOne(slot: LevelSlot): { level: OutLevel; failures: string[] } {
       hornets: metrics.hornets,
       hasQueen: metrics.hasQueen,
       minMoves,
-      carelessLoss: Math.round(carelessLoss * 100) / 100,
-      carelessFloor: Math.round(slot.carelessFloor * 100) / 100,
+      planningLoss: Math.round(planningLoss * 100) / 100,
+      planningFloor: Math.round(slot.planningFloor * 100) / 100,
     },
     failures,
   }
@@ -186,19 +186,19 @@ for (let ch = 1; ch <= 6; ch++) {
   const honeyLvls = g.filter((l) => l.honeyCells.length > 0).length
   const rng = (a: number[]) => `${Math.min(...a)}–${Math.max(...a)}`
   const avg = (a: number[]) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1)
-  const cl = (g.reduce((a, l) => a + l.carelessLoss, 0) / g.length) * 100
+  const cl = (g.reduce((a, l) => a + l.planningLoss, 0) / g.length) * 100
   console.log(
     `   ${ch}    |    ${rng(goals).padEnd(11)}| ${rng(depth).padEnd(15)}|   ${String(queens).padEnd(5)}|   ${String(hornets).padEnd(6)}| ${String(honeyLvls).padEnd(6)}|        ${(cl.toFixed(0) + '%').padEnd(11)}|  ${avg(diff)}`,
   )
 }
 
 // Report any level that failed to reach its rising careless-loss floor.
-const short = levels.filter((l) => l.carelessLoss + 0.02 < l.carelessFloor)
+const short = levels.filter((l) => l.planningLoss + 0.02 < l.planningFloor)
 if (short.length > 0) {
   console.log(`\n${short.length} level(s) BELOW their careless-loss floor (tune the curve):`)
   for (const l of short)
     console.log(
-      `  L${l.id}: got ${(l.carelessLoss * 100).toFixed(0)}% vs floor ${(l.carelessFloor * 100).toFixed(0)}%  (honey ${l.honeyCells.length}, queen ${l.hasQueen ? 'Y' : 'n'}, hornets ${l.hornets})`,
+      `  L${l.id}: got ${(l.planningLoss * 100).toFixed(0)}% vs floor ${(l.planningFloor * 100).toFixed(0)}%  (honey ${l.honeyCells.length}, queen ${l.hasQueen ? 'Y' : 'n'}, hornets ${l.hornets})`,
     )
 } else {
   console.log('\nAll levels meet their careless-loss floor. ✓')

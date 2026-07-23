@@ -76,6 +76,51 @@ export function carelessLossRate(start: BoardState, trials: number, seedBase: nu
 }
 
 /**
+ * Fraction of COMPETENT-but-non-searching playthroughs that LOSE — the honest
+ * measure of whether a level demands planning.
+ *
+ * `carelessLossRate` above measures random play, which wildly overstates
+ * difficulty: on a honey-free board "tap any clear bee, save the queen for last"
+ * ALWAYS wins (removing a bee only unblocks others), yet random play loses ~96%
+ * of the time there. Such a level scores as brutal and plays as free.
+ *
+ * This bot instead plays the obvious good strategy — never bump, never release
+ * the queen early, prefer a clean escape over gluing a bee into honey — but does
+ * NOT look ahead. When it still loses, the level genuinely requires a plan.
+ */
+export function smartGreedyLossRate(start: BoardState, trials: number, seedBase: number): number {
+  let losses = 0
+  for (let t = 0; t < trials; t++) {
+    const rand = makeRng(mixSeed(seedBase, (t + 1) * 104729))
+    const b = start.clone()
+    let won = false
+    for (let s = 0; s < 400; s++) {
+      if (b.remaining === 0) {
+        won = true
+        break
+      }
+      if (b.status !== 'playing') break
+
+      const goalsLeft = b.allOccupants().filter((o) => o.isGoal()).length
+      const moves = b
+        .allOccupants()
+        .filter((o) => o.isTappable())
+        .map((o) => ({ o, out: b.trace(o) }))
+        .filter((m) => m.out.kind !== 'blocked')
+        .filter((m) => !(m.o.kind === 'queen' && m.out.kind === 'escaped' && goalsLeft > 1))
+      if (moves.length === 0) break // stranded
+
+      const escapes = moves.filter((m) => m.out.kind === 'escaped')
+      const pool = escapes.length > 0 ? escapes : moves
+      const pick = pool[Math.floor(rand() * pool.length)]
+      b.tap(pick.o.q, pick.o.r)
+    }
+    if (!won) losses++
+  }
+  return losses / trials
+}
+
+/**
  * A safe next tap for the runtime hint on honey boards: the first tap (escape or
  * stuck) that keeps the board solvable. Falls back to null if none.
  */

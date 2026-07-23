@@ -157,9 +157,12 @@ test.describe('Bee Free — full playtest', () => {
   })
 
   test('the queen leaving early loses the level', async ({ page }) => {
-    // Find a level where the queen can fly out immediately.
+    // Find a level where the queen can fly out immediately. She joins at L14
+    // (index 13), but the generator seeds her first and packs bees around her,
+    // so she is blocked at the start on 136 of 137 queen levels — a wide scan is
+    // needed to reach the one board where this rule is observable in the UI.
     let snap: BoardSnapshot | undefined
-    for (let idx = 13; idx < 20; idx++) {
+    for (let idx = 13; idx < 80; idx++) {
       await startLevel(page, idx)
       const s = await snapshot(page)
       const queen = s.occupants.find((o) => o.kind === 'queen')

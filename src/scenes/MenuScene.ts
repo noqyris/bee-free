@@ -11,8 +11,8 @@ import { makeButton, makeIconButton, FONT_STACK } from '../utils/ui'
 const CHAPTER_SIZE = 25
 const COLS = 5
 const ROWS = 5
-const GRID_TOP = 300
-const GRID_BOTTOM = 1030
+const GRID_TOP = 340
+const GRID_BOTTOM = 958
 const GRID_LEFT = 112
 const GRID_RIGHT = GAME_WIDTH - 112
 
@@ -56,52 +56,62 @@ export class MenuScene extends Phaser.Scene {
     ).setDepth(50)
   }
 
+  /**
+   * Stat pills sit on their own row ABOVE the wordmark. Side by side, the 68px
+   * title spans x≈191–529 and ran straight into both pills (38–214, 506–682);
+   * stacking is the only arrangement that stays clear at this width.
+   */
   private buildHeader(): void {
+    this.statPill(38, 44, 176, `${saveManager.totalStars()}/${LEVEL_COUNT * 3}`, colors.starGold, colors.hudTextCss, 26)
+    this.statPill(GAME_WIDTH - 214, 44, 176, String(saveManager.honey), colors.honey, colors.honeyCss, 30)
+
     this.add
-      .text(GAME_WIDTH / 2, 78, t('app.title'), {
+      .text(GAME_WIDTH / 2, 140, t('app.title'), {
         fontFamily: FONT_STACK,
-        fontSize: '68px',
+        fontSize: '64px',
         color: '#ffd23f',
         stroke: '#241708',
         strokeThickness: 9,
       })
       .setOrigin(0.5)
+  }
 
-    // Honey pill (top-right)
-    const pill = this.add.graphics()
-    pill.fillStyle(0x000000, 0.28)
-    pill.fillRoundedRect(GAME_WIDTH - 214, 46, 176, 60, 30)
-    this.add.star(GAME_WIDTH - 186, 76, 5, 9, 18, colors.honey).setOrigin(0.5)
+  /** Rounded "glass" chip: translucent fill, hairline rim, star + value. */
+  private statPill(
+    x: number,
+    y: number,
+    w: number,
+    value: string,
+    starColor: number,
+    textCss: string,
+    fontSize: number,
+  ): void {
+    const h = 56
+    const g = this.add.graphics()
+    g.fillStyle(0x000000, 0.32)
+    g.fillRoundedRect(x, y, w, h, h / 2)
+    g.lineStyle(2, 0xffffff, 0.1)
+    g.strokeRoundedRect(x, y, w, h, h / 2)
+    this.add.star(x + 28, y + h / 2, 5, 8, 17, starColor).setOrigin(0.5)
     this.add
-      .text(GAME_WIDTH - 166, 76, String(saveManager.honey), {
+      .text(x + 52, y + h / 2, value, {
         fontFamily: FONT_STACK,
-        fontSize: '30px',
-        color: colors.honeyCss,
-      })
-      .setOrigin(0, 0.5)
-
-    // Total-stars pill (top-left)
-    this.add.graphics().fillStyle(0x000000, 0.28).fillRoundedRect(38, 46, 176, 60, 30)
-    this.add.star(66, 76, 5, 9, 18, colors.starGold).setOrigin(0.5)
-    this.add
-      .text(90, 76, `${saveManager.totalStars()}/${LEVEL_COUNT * 3}`, {
-        fontFamily: FONT_STACK,
-        fontSize: '26px',
-        color: colors.hudTextCss,
+        fontSize: `${fontSize}px`,
+        color: textCss,
       })
       .setOrigin(0, 0.5)
   }
 
   private buildChapterNav(): void {
     this.chapterTitle = this.add
-      .text(GAME_WIDTH / 2, 176, '', {
+      .text(GAME_WIDTH / 2, 208, '', {
         fontFamily: FONT_STACK,
         fontSize: '44px',
         color: colors.hudTextCss,
       })
       .setOrigin(0.5)
     this.chapterSub = this.add
-      .text(GAME_WIDTH / 2, 222, '', {
+      .text(GAME_WIDTH / 2, 250, '', {
         fontFamily: FONT_STACK,
         fontSize: '24px',
         color: colors.hudTextCss,
@@ -109,8 +119,8 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.6)
 
-    makeIconButton(this, 60, 200, '‹', () => this.changeChapter(-1), 34)
-    makeIconButton(this, GAME_WIDTH - 60, 200, '›', () => this.changeChapter(1), 34)
+    makeIconButton(this, 60, 222, '‹', () => this.changeChapter(-1), 34)
+    makeIconButton(this, GAME_WIDTH - 60, 222, '›', () => this.changeChapter(1), 34)
   }
 
   /**
@@ -120,7 +130,7 @@ export class MenuScene extends Phaser.Scene {
    */
   private buildStoreRow(): void {
     if (!purchaseService.storeAvailable) return
-    const y = 1115
+    const y = 1096
 
     if (!purchaseService.adsRemoved) {
       const price = purchaseService.removeAdsPrice
@@ -181,7 +191,7 @@ export class MenuScene extends Phaser.Scene {
   /** Brief, non-blocking feedback message near the bottom of the menu. */
   private showToast(message: string): void {
     const label = this.add
-      .text(GAME_WIDTH / 2, 1050, message, {
+      .text(GAME_WIDTH / 2, 1030, message, {
         fontFamily: FONT_STACK,
         fontSize: '24px',
         color: colors.hudTextCss,
@@ -200,7 +210,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private buildDots(): void {
-    const y = GRID_BOTTOM + 42
+    const y = GRID_BOTTOM + 66
     const n = CHAPTER_THEMES.length
     const spacing = 30
     const startX = GAME_WIDTH / 2 - ((n - 1) * spacing) / 2

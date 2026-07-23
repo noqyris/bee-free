@@ -3,6 +3,8 @@ import { BoardState } from '../src/systems/BoardState'
 import { searchMinMoves } from '../src/systems/SolverSearch'
 import { LEVELS, LEVEL_COUNT, chapterOf } from '../src/levels'
 import { axialKey } from '../src/systems/HexGrid'
+// Raw generator output: carries minMoves, which LevelData does not expose.
+import generated from '../src/levels/levels.generated.json'
 
 const hasHoney = (l: (typeof LEVELS)[number]): boolean => (l.honeyCells?.length ?? 0) > 0
 
@@ -83,9 +85,14 @@ describe('generated level set', () => {
       })
 
       it('has a coherent, non-degenerate budget', () => {
-        const slack = level.moveBudget - goalCount(level)
+        // The budget is minMoves + slack, and on a honey board minMoves exceeds
+        // the goal count (each stranded bee costs an extra tap to re-launch), so
+        // budget-minus-goals is NOT the slack — compare against minMoves.
+        const minMoves = generated.levels[level.id - 1].minMoves
+        const slack = level.moveBudget - minMoves
+        expect(minMoves).toBeGreaterThanOrEqual(goalCount(level))
         expect(slack).toBeGreaterThanOrEqual(0)
-        expect(slack).toBeLessThanOrEqual(12)
+        expect(slack).toBeLessThanOrEqual(4)
         expect(level.threeStarSpare).toBeGreaterThanOrEqual(0)
         expect(level.threeStarSpare).toBeLessThanOrEqual(slack)
       })
@@ -103,6 +110,8 @@ describe('generated level set', () => {
     })
   }
 
+  // Full BFS over every honey board; endgame levels carry 16 goals, so this
+  // needs well over the default 5s budget.
   it('every honey level actually forces the honey (min moves exceed goal count)', () => {
     const honeyLevels = LEVELS.filter(hasHoney)
     expect(honeyLevels.length).toBeGreaterThan(0)
@@ -110,11 +119,11 @@ describe('generated level set', () => {
       const board = new BoardState({ ...level, moveBudget: 999 })
       const min = searchMinMoves(board, level.moveBudget)
       // A bee must get stuck at least once → strictly more taps than goals.
-      expect(min as number).toBeGreaterThan(goalCount(level))
+      expect(min as number, `level ${level.id}`).toBeGreaterThan(goalCount(level))
       // And a one-move margin exists (fairness for a strand-able puzzle).
-      expect(level.moveBudget).toBeGreaterThan(min as number - 1)
+      expect(level.moveBudget, `level ${level.id}`).toBeGreaterThan((min as number) - 1)
     }
-  })
+  }, 120_000)
 
   it('later chapters actually force ordering (depth floor)', () => {
     // Chapters 4-6 should not contain trivially-orderless boards.

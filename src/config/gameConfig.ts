@@ -43,12 +43,15 @@ export const colors = {
 } as const
 
 export const layout = {
-  hudTopY: 88,
-  movesPillY: 176,
-  boardTop: 268,
+  hudTopY: 86,
+  // The moves pill is 96 tall and centred here, so its top edge is at
+  // movesPillY - 48. Keep that clear of the title's descenders (title sits at
+  // hudTopY with a 42px face) or the two visibly collide on device.
+  movesPillY: 198,
+  boardTop: 286,
   boardBottom: 1150,
   boardPaddingX: 40,
-  maxCellSize: 62,
+  maxCellSize: 74,
   minCellSize: 15,
   safeTop: 44,
 } as const
