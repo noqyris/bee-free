@@ -4,6 +4,8 @@ import { juice } from '../config/juiceConfig'
 import { LEVEL_COUNT } from '../levels'
 import { themeForChapter } from '../config/theme'
 import { t } from '../i18n'
+import { adService } from '../systems/AdService'
+import { reviewService } from '../systems/ReviewService'
 import { makeButton, FONT_STACK } from '../utils/ui'
 
 interface LevelCompleteData {
@@ -17,6 +19,7 @@ interface LevelCompleteData {
 
 export class LevelCompleteScene extends Phaser.Scene {
   private params!: LevelCompleteData
+  private busy = false
 
   constructor() {
     super('LevelComplete')
@@ -24,6 +27,7 @@ export class LevelCompleteScene extends Phaser.Scene {
 
   init(data: LevelCompleteData): void {
     this.params = data
+    this.busy = false
   }
 
   create(): void {
@@ -117,13 +121,13 @@ export class LevelCompleteScene extends Phaser.Scene {
         0,
         140,
         hasNext ? t('result.next') : t('result.menu'),
-        () => (hasNext ? this.goToLevel(this.params.levelIndex + 1) : this.goMenu()),
+        () => void (hasNext ? this.goToLevel(this.params.levelIndex + 1) : this.goMenu()),
         { width: 400, height: 92, fontSize: 36, accent: theme.accent },
       ),
     )
 
     panel.add(
-      makeButton(this, -110, 250, t('result.replay'), () => this.goToLevel(this.params.levelIndex), {
+      makeButton(this, -110, 250, t('result.replay'), () => void this.goToLevel(this.params.levelIndex), {
         width: 200,
         height: 72,
         fontSize: 26,
@@ -131,7 +135,7 @@ export class LevelCompleteScene extends Phaser.Scene {
       }),
     )
     panel.add(
-      makeButton(this, 110, 250, t('result.menu'), () => this.goMenu(), {
+      makeButton(this, 110, 250, t('result.menu'), () => void this.goMenu(), {
         width: 200,
         height: 72,
         fontSize: 26,
@@ -146,14 +150,26 @@ export class LevelCompleteScene extends Phaser.Scene {
       duration: juice.ui.panelSlideMs,
       ease: 'Back.easeOut',
     })
+
+    // Ask for a store review right after a perfect run — the one moment the
+    // player is provably happy. ReviewService decides if it's actually due.
+    this.time.delayedCall(juice.ui.panelSlideMs + 600, () => {
+      void reviewService.maybeRequestReview(this.params.stars)
+    })
   }
 
-  private goToLevel(index: number): void {
+  private async goToLevel(index: number): Promise<void> {
+    if (this.busy) return
+    this.busy = true
+    await adService.maybeShowInterstitial(this.params.levelIndex + 1)
     this.scene.stop('Game')
     this.scene.start('Game', { levelIndex: index })
   }
 
-  private goMenu(): void {
+  private async goMenu(): Promise<void> {
+    if (this.busy) return
+    this.busy = true
+    await adService.maybeShowInterstitial(this.params.levelIndex + 1)
     this.scene.stop('Game')
     this.scene.start('Menu')
   }

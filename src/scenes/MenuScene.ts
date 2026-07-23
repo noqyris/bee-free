@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { GAME_WIDTH, GAME_HEIGHT, colors } from '../config/gameConfig'
 import { LEVEL_COUNT } from '../levels'
 import { CHAPTER_THEMES, themeForChapter, type ChapterTheme } from '../config/theme'
+import { purchaseService } from '../systems/PurchaseService'
 import { saveManager } from '../systems/SaveManager'
 import { paintBackground, type Background } from '../utils/background'
 import { t, type StringKey } from '../i18n'
@@ -41,6 +42,7 @@ export class MenuScene extends Phaser.Scene {
     this.buildChapterNav()
     this.buildDots()
     this.renderChapter(this.currentChapter)
+    this.buildStoreRow()
 
     // Continue button always resumes the player's current level — label it with
     // that level number so it's clear it isn't "play the chapter you're browsing".
@@ -109,6 +111,92 @@ export class MenuScene extends Phaser.Scene {
 
     makeIconButton(this, 60, 200, '‹', () => this.changeChapter(-1), 34)
     makeIconButton(this, GAME_WIDTH - 60, 200, '›', () => this.changeChapter(1), 34)
+  }
+
+  /**
+   * Store controls: buy "remove ads", plus the Restore control Apple requires
+   * any app selling a non-consumable to expose. Native only — on web there is
+   * no store, so the row is simply absent.
+   */
+  private buildStoreRow(): void {
+    if (!purchaseService.storeAvailable) return
+    const y = 1115
+
+    if (!purchaseService.adsRemoved) {
+      const price = purchaseService.removeAdsPrice
+      makeButton(
+        this,
+        250,
+        y,
+        price ? t('store.removeAdsPrice', { price }) : t('store.removeAds'),
+        () => void this.buyRemoveAds(),
+        { width: 300, height: 54, fontSize: 22, primary: false },
+      ).setDepth(50)
+    } else {
+      this.add
+        .text(250, y, t('store.adsRemoved'), {
+          fontFamily: FONT_STACK,
+          fontSize: '22px',
+          color: colors.honeyCss,
+        })
+        .setOrigin(0.5)
+        .setDepth(50)
+    }
+
+    makeButton(this, 520, y, t('store.restore'), () => void this.restorePurchases(), {
+      width: 180,
+      height: 54,
+      fontSize: 19,
+      primary: false,
+    }).setDepth(50)
+  }
+
+  private async buyRemoveAds(): Promise<void> {
+    const res = await purchaseService.buyRemoveAds()
+    if (res.ok) {
+      this.showToast(t('store.adsRemoved'))
+      this.scene.restart() // redraw the row without the buy button
+      return
+    }
+    if (res.reason === 'cancelled') return // silent: the player chose to back out
+    this.showToast(
+      res.reason === 'pending'
+        ? t('store.pending')
+        : res.reason === 'unavailable'
+          ? t('store.unavailable')
+          : t('store.failed'),
+    )
+  }
+
+  private async restorePurchases(): Promise<void> {
+    const res = await purchaseService.restore()
+    if (res.ok) {
+      this.showToast(t('store.restored'))
+      this.scene.restart()
+    } else {
+      this.showToast(res.reason === 'unavailable' ? t('store.unavailable') : t('store.nothingToRestore'))
+    }
+  }
+
+  /** Brief, non-blocking feedback message near the bottom of the menu. */
+  private showToast(message: string): void {
+    const label = this.add
+      .text(GAME_WIDTH / 2, 1050, message, {
+        fontFamily: FONT_STACK,
+        fontSize: '24px',
+        color: colors.hudTextCss,
+        backgroundColor: '#00000099',
+        padding: { x: 18, y: 10 },
+      })
+      .setOrigin(0.5)
+      .setDepth(300)
+    this.tweens.add({
+      targets: label,
+      alpha: 0,
+      delay: 1800,
+      duration: 400,
+      onComplete: () => label.destroy(),
+    })
   }
 
   private buildDots(): void {

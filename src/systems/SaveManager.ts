@@ -23,6 +23,8 @@ export interface SaveData {
   removeAdsPurchased: boolean
   settings: Settings
   consentStatus: string | null
+  /** Epoch ms of the last native review prompt, so we don't nag. */
+  lastReviewPromptAt: number | null
 }
 
 export const SCHEMA_VERSION = 1
@@ -41,6 +43,7 @@ function defaultSave(): SaveData {
     removeAdsPurchased: false,
     settings: { sfx: true, music: true, haptics: true },
     consentStatus: null,
+    lastReviewPromptAt: null,
   }
 }
 
@@ -124,6 +127,30 @@ class SaveManager {
   updateSettings(patch: Partial<Settings>): void {
     this.data.settings = { ...this.data.settings, ...patch }
     this.persist()
+  }
+
+  /**
+   * Cache of the store entitlement. StoreKit stays the source of truth (see
+   * PurchaseService); this only lets the UI react instantly and offline.
+   */
+  setRemoveAdsPurchased(value: boolean): void {
+    this.data.removeAdsPurchased = value
+    this.persist()
+  }
+
+  updateConsentStatus(status: string | null): void {
+    this.data.consentStatus = status
+    this.persist()
+  }
+
+  markReviewPrompted(at: number): void {
+    this.data.lastReviewPromptAt = at
+    this.persist()
+  }
+
+  /** Levels the player has actually finished (used to pace the review prompt). */
+  levelsCompleted(): number {
+    return Object.keys(this.data.stars).length
   }
 
   totalStars(): number {

@@ -135,6 +135,15 @@ export class BoardState {
     this.occupants.delete(axialKey(q, r))
   }
 
+  /**
+   * Extend the move budget — the rewarded-ad "keep going" revive. This can lift
+   * a board back out of an out-of-moves loss, but deliberately cannot undo a
+   * queen violation: that loss is permanent by design.
+   */
+  grantExtraMoves(n: number): void {
+    if (n > 0) this.budget += n
+  }
+
   /** Deep-copies occupants; the immutable cell set is shared. */
   clone(): BoardState {
     const copy = new BoardState()

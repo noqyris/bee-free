@@ -44,6 +44,8 @@ export class GameScene extends Phaser.Scene {
   private lastEscapeAt = -Infinity
   private previewGfx!: Phaser.GameObjects.Graphics
   private pending?: { occ: CellOccupant; q: number; r: number }
+  /** Set when the player took the rewarded-ad revive; caps the win at 1 star. */
+  private usedRevive = false
 
   constructor() {
     super('Game')
@@ -64,6 +66,7 @@ export class GameScene extends Phaser.Scene {
     this.comboCount = 0
     this.lastEscapeAt = -Infinity
     this.pending = undefined
+    this.usedRevive = false
 
     paintBackground(this, this.theme)
     this.layoutBoard()
@@ -652,13 +655,33 @@ export class GameScene extends Phaser.Scene {
 
   // ── Resolution ────────────────────────────────────────────────────────────
 
+  /**
+   * Rewarded-ad revive: hand the player extra moves and put them straight back
+   * into the board they just lost. Called by LevelFailedScene once the ad has
+   * actually paid out. Only ever offered for an out-of-moves loss — a queen
+   * violation is unrecoverable, so there is nothing to revive into.
+   */
+  reviveWithExtraMoves(extra: number): void {
+    this.board.grantExtraMoves(extra)
+    this.usedRevive = true
+    this.inputLocked = false
+    this.pending = undefined
+    this.previewGfx.clear()
+    this.updateMovesHud()
+  }
+
   private resolveAfterAction(): void {
     this.inputLocked = false
     const status = this.board.status
     if (status === 'won') {
       // 3 stars require finishing with the level's spare margin left; else 2.
-      // (1 star is reserved for the rewarded +3-moves revive, wired in M5.)
-      const stars = this.board.movesLeft >= this.level.threeStarSpare ? 3 : 2
+      // A rewarded-ad revive caps the win at 1 star — the level still counts as
+      // beaten, but a bought second chance never earns a perfect score.
+      const stars = this.usedRevive
+        ? 1
+        : this.board.movesLeft >= this.level.threeStarSpare
+          ? 3
+          : 2
       difficultyDirector.recordWin(this.level.id)
       const honey = saveManager.recordWin(this.level.id, stars, LEVEL_COUNT)
       this.inputLocked = true
