@@ -1,3 +1,5 @@
+import { DEV_UNLOCK_ALL_LEVELS } from '../config/devConfig'
+
 /**
  * Local save data (spec §9). Backed by localStorage for the web/dev build; the
  * async surface (load) lets a Capacitor Preferences backend drop in later with
@@ -90,6 +92,8 @@ class SaveManager {
   }
 
   isUnlocked(levelId: number): boolean {
+    // Dev toggle: every level playable for testing (see config/devConfig.ts).
+    if (DEV_UNLOCK_ALL_LEVELS) return true
     return levelId <= this.data.currentLevel
   }
 
