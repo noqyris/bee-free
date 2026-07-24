@@ -48,13 +48,14 @@ Pacing lives in `ADS` in `src/config/monetization.ts`: no interstitials before
 level 6, then one every 3rd level result with a 90s cooldown. Ads never show for
 a player who bought "remove ads".
 
-The **banner runs on the board screen only** (`ADS.bannerDuringPlay`). It is a
-native view pinned to the bottom of the SCREEN, sitting above the web view, so it
-does not respect canvas coordinates. The board screen keeps everything above
-y=1100 of 1280, so the banner can never cover it — but the menu's Continue button
-reaches y=1246, and on iPad-shaped screens the canvas fills the height with no
-letterbox for the banner to occupy, so it would be clipped there. Putting the
-banner on the menu means first compressing that layout.
+The **banner runs on every screen** (`ADS.bannerDuringPlay`) — Home, the level
+map and the board — brought up once and left up until a "remove ads" purchase
+takes it down. It is a native view pinned to the bottom of the SCREEN, sitting
+above the web view, so it does not respect canvas coordinates. The rule that
+keeps it from covering anything is a single constant: no scene draws below
+`layout.bannerSafeBottom` (1130 of 1280). On a tall phone the canvas letterboxes
+and the bar sits in the black band; on a 4:3 iPad the canvas fills the height and
+the bar eats the bottom ~13%, which that constant keeps clear on every screen.
 
 ### AdMob app verification ("require review" / app-ads.txt)
 
@@ -181,35 +182,56 @@ in the web UI: Apps → **+** → New App, with bundle id `com.beefree.hiveescap
 Levels are static JSON generated offline, never at runtime:
 
 ```bash
-npm run gen:levels             # regenerate all 150 (~110s, sharded across cores)
+npm run gen:levels             # regenerate all 150 (~3.5 min, sharded across cores)
 npx tsx scripts/humanDifficulty.ts   # the metric that matters (see below)
-npx tsx scripts/difficulty.ts        # legacy random-play profile, kept for contrast
 ```
 
 `npm run gen:levels` fails the build if any level is unsolvable, over budget, or
 misses its planning floor. See `src/config/levelCurve.ts` for the schedule.
 
+### The mechanic: the honey TRAIL
+
+Every bee smears honey across each cell it flies over, and that honey stays
+sticky for `dryMoves` further moves before it dries (`BoardState.layTrail`). Fly
+a bee into a trail that is still wet and it stops dead in the honey and becomes a
+blocker. So a legal-looking move can strand you, and the whole level is the
+ORDER — which is what makes it a planning puzzle rather than a tapping one.
+
+Why the drying matters: a *permanent* trail makes ordering irrelevant, because
+the number of trail collisions is then fixed no matter what order you play (a
+cell crossed by k paths costs exactly k-1 stops). Drying is what turns the board
+into a scheduling problem. `dryMoves` is therefore THE difficulty knob: it ramps
+1 → 4 across the game (5 on spikes).
+
 ### Measure planning pressure, not careless-loss
 
 The curve is tuned against **smart-greedy loss**: how often a bot that plays
 competently but does *not* search ahead still loses. It never bumps, never frees
-the queen early, and prefers a clean escape over gluing a bee into honey.
+the queen early, prefers a clean escape — but cannot see that today's clean
+escape lays honey across the lane the next bee needs.
 
-Do **not** tune against careless (random) play. That was the original target and
-it was actively misleading: on a honey-free board "tap any clear bee, queen
-last" always wins — removing a bee only ever unblocks others — yet random play
-loses ~96% there. 117 of 150 levels scored as brutal and played as free.
+Do **not** tune against careless (random) play. With no trail in the way "tap any
+clear bee, queen last" always wins, yet random play loses ~96% there — it scores
+levels as brutal that play as free.
 
 Practical consequences for anyone re-tuning:
 
-- **Honey is the difficulty.** It is the only mechanic that breaks monotonicity,
-  so a legal-looking move can strand you. More honey cells, denser board and
-  tighter `slack` are the levers that work.
-- **The queen is nearly free.** She is blocked at the start on 136 of 137 queen
-  levels, so her "leaves early = loss" trap almost never fires. She is kept as an
-  ordering constraint, not as a difficulty source.
-- **Bee count must keep rising.** It is capped because the BFS validator is
-  exponential-ish in goal count; with the cap pinned at 12, chapters 5 and 6 came
-  out identical. It now ramps to 16.
-- **Prefer the smallest adequate board.** A sparse board is easier to plan on,
-  not harder.
+- **`dryMoves` is the difficulty.** Longer stickiness = more of the board is a
+  no-go zone at once = more that must be planned. It buys difficulty far more
+  cheaply than extra bees, so raise it before raising bee count.
+- **Boards must stay small and full.** The trail only bites where flight paths
+  overlap, and they only overlap on a packed board. An early draft gave chapter 6
+  a 61-cell board for a dozen bees and every one had a private lane — the hardest
+  levels measured as free. `fillTarget` and the deliberately modest `SHAPE_POOLS`
+  keep the density up.
+- **Validation is a real search, not greedy.** `searchMinMoves` (iterative-
+  deepening DFS keyed on occupants + the wet trail) proves a perfect order
+  exists; the generator only ships boards where it does, and records the exact
+  `minMoves` it found. `tests/generatedLevels.test.ts` re-solves all 150 and
+  checks they still match.
+- **The bee cap is a search-cost limit,** not a design one — the state space
+  grows with both bee count and stickiness, so the cap tightens as `dryMoves`
+  rises (15 → 13).
+- **The queen and hornets are ordering spice,** layered on top of the trail: the
+  queen pins one end of the sequence, hornets shorten flights and split the
+  board. Neither carries difficulty on its own.

@@ -6,30 +6,6 @@ import { axialKey } from '../src/systems/HexGrid'
 // Raw generator output: carries minMoves, which LevelData does not expose.
 import generated from '../src/levels/levels.generated.json'
 
-const hasHoney = (l: (typeof LEVELS)[number]): boolean => (l.honeyCells?.length ?? 0) > 0
-
-/**
- * Independent verifier (does NOT use src/systems/Solver): greedily escape any
- * goal with a clear path — a non-queen bee, or the queen once she is the last
- * goal — skipping hornets. If this clears all goals it is a valid bump-free
- * solution of length = goal count. Returns moves used, or null if it deadlocks.
- */
-function greedyClear(board: BoardState): number | null {
-  let moves = 0
-  for (;;) {
-    if (board.remaining === 0) return moves // all goals cleared
-    const goalsLeft = board.remaining
-    const occ = board.allOccupants().find((o) => {
-      if (o.kind === 'hornet') return false
-      if (o.kind === 'queen' && goalsLeft > 1) return false
-      return board.trace(o).kind === 'escaped'
-    })
-    if (!occ) return null // deadlock: unsolvable
-    board.removeOccupant(occ.q, occ.r)
-    moves++
-  }
-}
-
 const goalCount = (l: (typeof LEVELS)[number]): number =>
   l.bees.filter((b) => b.kind !== 'hornet').length
 
@@ -68,30 +44,18 @@ describe('generated level set', () => {
         }
       })
 
-      it('is solvable within budget', () => {
-        if (hasHoney(level)) {
-          // Honey breaks monotonicity → verify by full search (unbounded budget
-          // board, capped at the level's move budget).
-          const board = new BoardState({ ...level, moveBudget: 999 })
-          const min = searchMinMoves(board, level.moveBudget)
-          expect(min).not.toBeNull()
-          expect(min as number).toBeLessThanOrEqual(level.moveBudget)
-        } else {
-          const goals = goalCount(level)
-          const moves = greedyClear(new BoardState(level))
-          expect(moves).toBe(goals)
-          expect(level.moveBudget).toBeGreaterThanOrEqual(goals)
-        }
+      it('lays a honey trail', () => {
+        expect(level.dryMoves ?? 0).toBeGreaterThan(0)
       })
 
       it('has a coherent, non-degenerate budget', () => {
-        // The budget is minMoves + slack, and on a honey board minMoves exceeds
-        // the goal count (each stranded bee costs an extra tap to re-launch), so
-        // budget-minus-goals is NOT the slack — compare against minMoves.
+        // The budget is minMoves + slack. minMoves is NOT the goal count: on most
+        // boards even the best line has to fly into its own honey once or twice,
+        // and each stop costs an extra tap. So compare against minMoves.
         const minMoves = generated.levels[level.id - 1].minMoves
         const slack = level.moveBudget - minMoves
         expect(minMoves).toBeGreaterThanOrEqual(goalCount(level))
-        expect(slack).toBeGreaterThanOrEqual(0)
+        expect(slack).toBeGreaterThanOrEqual(1)
         expect(slack).toBeLessThanOrEqual(4)
         expect(level.threeStarSpare).toBeGreaterThanOrEqual(0)
         expect(level.threeStarSpare).toBeLessThanOrEqual(slack)
@@ -101,29 +65,29 @@ describe('generated level set', () => {
         expect(goalCount(level)).toBeGreaterThanOrEqual(2)
       })
 
-      it('never traps a bee behind a hornet (all goals escapable in order)', () => {
-        // greedyClear returning non-null already proves this, but assert the
-        // queen-last rule explicitly: at most one queen per level.
-        const queens = level.bees.filter((b) => b.kind === 'queen').length
-        expect(queens).toBeLessThanOrEqual(1)
+      it('holds at most one queen', () => {
+        expect(level.bees.filter((b) => b.kind === 'queen').length).toBeLessThanOrEqual(1)
       })
     })
   }
 
-  // Full BFS over every honey board; endgame levels carry 16 goals, so this
-  // needs well over the default 5s budget.
-  it('every honey level actually forces the honey (min moves exceed goal count)', () => {
-    const honeyLevels = LEVELS.filter(hasHoney)
-    expect(honeyLevels.length).toBeGreaterThan(0)
-    for (const level of honeyLevels) {
+  /**
+   * The one that actually matters: with the trail in play a bump-free order is
+   * no longer a proof of anything, because a legal-looking flight can glue a bee
+   * into honey that a later bee needs. So every shipped level is re-solved from
+   * scratch here, by the same search the generator used, and must come out at
+   * the minMoves recorded in the JSON — no drift between what was validated and
+   * what ships.
+   */
+  it('is beatable inside its move budget, at exactly the recorded minimum', () => {
+    for (const level of LEVELS) {
       const board = new BoardState({ ...level, moveBudget: 999 })
       const min = searchMinMoves(board, level.moveBudget)
-      // A bee must get stuck at least once → strictly more taps than goals.
-      expect(min as number, `level ${level.id}`).toBeGreaterThan(goalCount(level))
-      // And a one-move margin exists (fairness for a strand-able puzzle).
-      expect(level.moveBudget, `level ${level.id}`).toBeGreaterThan((min as number) - 1)
+      expect(min, `level ${level.id}`).not.toBeNull()
+      expect(min, `level ${level.id}`).toBe(generated.levels[level.id - 1].minMoves)
+      expect(min as number, `level ${level.id}`).toBeLessThanOrEqual(level.moveBudget)
     }
-  }, 120_000)
+  }, 300_000)
 
   it('later chapters actually force ordering (depth floor)', () => {
     // Chapters 4-6 should not contain trivially-orderless boards.

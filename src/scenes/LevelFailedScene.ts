@@ -42,8 +42,12 @@ export class LevelFailedScene extends Phaser.Scene {
 
     const panel = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 60).setAlpha(0)
 
-    // The revive offer needs an extra button row, so the panel grows for it.
-    const half = canRevive ? 320 : 260
+    // Panel height is content-driven so the buttons always sit INSIDE it. The
+    // old version pinned the menu button's centre at the panel's exact bottom
+    // edge, so its rounded base and drop shadow spilled over the border — the
+    // "buttons falling out of the modal" seen on a fail with the revive offer.
+    // These coordinates keep the lowest button's shadow ≥ 20px clear of the rim.
+    const half = canRevive ? 300 : 268
     const g = this.add.graphics()
     g.fillStyle(colors.panelDeep, 1)
     g.fillRoundedRect(-284, -half - 4, 568, (half + 4) * 2, 40)
@@ -53,9 +57,13 @@ export class LevelFailedScene extends Phaser.Scene {
     g.strokeRoundedRect(-280, -half, 560, half * 2, 36)
     panel.add(g)
 
+    const titleY = canRevive ? -212 : -180
+    const beeY = canRevive ? -120 : -78
+    const beesLeftY = canRevive ? -58 : -6
+
     panel.add(
       this.add
-        .text(0, -half + 88, this.params.queenLeftEarly ? t('result.loseQueen') : t('result.lose'), {
+        .text(0, titleY, this.params.queenLeftEarly ? t('result.loseQueen') : t('result.lose'), {
           fontFamily: FONT_STACK,
           fontSize: this.params.queenLeftEarly ? '40px' : '52px',
           color: '#ff8b57',
@@ -67,7 +75,7 @@ export class LevelFailedScene extends Phaser.Scene {
         .setOrigin(0.5),
     )
 
-    const bee = this.add.sprite(0, -52, 'bee').setScale(1.15).setRotation(0.5)
+    const bee = this.add.sprite(0, beeY, 'bee').setScale(1.15).setRotation(0.5)
     panel.add(bee)
     this.tweens.add({
       targets: bee,
@@ -80,7 +88,7 @@ export class LevelFailedScene extends Phaser.Scene {
 
     panel.add(
       this.add
-        .text(0, 44, tp('result.beesLeft', this.params.beesLeft), {
+        .text(0, beesLeftY, tp('result.beesLeft', this.params.beesLeft), {
           fontFamily: FONT_STACK,
           fontSize: '28px',
           color: colors.hudTextCss,
@@ -95,20 +103,20 @@ export class LevelFailedScene extends Phaser.Scene {
         makeButton(
           this,
           0,
-          122,
+          30,
           t('result.reviveAd', { n: ADS.rewardedExtraMoves }),
           () => void this.watchAdAndRevive(),
-          { width: 460, height: 92, fontSize: 30, accent: colors.honey },
+          { width: 460, height: 88, fontSize: 30, accent: colors.honey },
         ),
       )
     }
 
-    const retryY = canRevive ? 224 : 132
-    const menuY = canRevive ? 292 : 222
+    const retryY = canRevive ? 138 : 96
+    const menuY = canRevive ? 240 : 200
     panel.add(
       makeButton(this, 0, retryY, t('result.retry'), () => void this.goToLevel(this.params.levelIndex), {
         width: 400,
-        height: canRevive ? 76 : 92,
+        height: canRevive ? 78 : 92,
         fontSize: canRevive ? 30 : 36,
         accent: theme.accent,
       }),
@@ -116,7 +124,7 @@ export class LevelFailedScene extends Phaser.Scene {
     panel.add(
       makeButton(this, 0, menuY, t('result.menu'), () => void this.goMenu(), {
         width: 240,
-        height: 56,
+        height: 60,
         fontSize: 24,
         primary: false,
       }),

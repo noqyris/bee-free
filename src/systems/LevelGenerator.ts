@@ -4,7 +4,6 @@ import { BoardState } from './BoardState'
 import { searchMinMoves, smartGreedyLossRate } from './SolverSearch'
 import { makeRng, mixSeed, weightedPick, type Rng } from '../utils/rng'
 import type { Cell } from './boardShapes'
-import type { BeeSpec } from '../types'
 
 /**
  * Solvability-guaranteed reverse generation (spec §4), with obstacles.
@@ -20,6 +19,13 @@ import type { BeeSpec } from '../types'
  * Queen: the first-placed bee (escapes last) becomes the queen. Since no later
  * bee's path can contain her, she blocks nobody, so the queen-last solution
  * always exists.
+ *
+ * That construction ignores the honey trail, so it only guarantees an order
+ * with no BUMPS. Whether an order exists that also never flies into a wet trail
+ * is a genuinely harder question, and it is what the level is actually about —
+ * so every candidate board is put through the full search here, and only boards
+ * where a perfect order still exists are shipped. Among those we keep the one
+ * where competent-but-unplanned play fails most often.
  */
 
 export interface GenOccupant extends SolverBee {}
@@ -27,13 +33,13 @@ export interface GenOccupant extends SolverBee {}
 export interface GenBoard {
   occupants: GenOccupant[]
   honeyCells: Array<[number, number]>
-  /** Minimum taps to clear all goals (accounts for honey detours). */
+  /** Minimum taps to clear all goals, accounting for honey-trail detours. */
   minMoves: number
   metrics: BoardMetrics
   /**
-   * Measured fraction of mindless playthroughs that LOSE at the real budget —
-   * the ground-truth "how much thinking does this level demand?" signal, used
-   * to enforce the rising difficulty floor.
+   * Measured fraction of competent-but-unplanned playthroughs that LOSE at the
+   * real budget — the ground-truth "how much thinking does this level demand?"
+   * signal, used to enforce the rising difficulty floor.
    */
   planningLoss: number
 }
@@ -88,6 +94,8 @@ function placeBees(
       }
     }
     if (candidates.length === 0) break
+    // Long rays cross more of the board, so they overlap more other flight
+    // paths — which is exactly where the trail forces an order.
     const chosen = weightedPick(rng, candidates, (c) => Math.pow(c.len + 1, rayBias))
     occ.add(axialKey(chosen.q, chosen.r))
     bees.push({ q: chosen.q, r: chosen.r, dir: chosen.dir, kind: 'bee' })
@@ -121,113 +129,15 @@ export interface GenRequest {
   attempts: number
   hornets: number
   hasQueen: boolean
-  honey: number
-  /** Move budget above the minimum; used to tune honey trickiness. */
+  /** Moves a flown-over cell stays sticky. The level's core difficulty knob. */
+  dryMoves: number
+  /** Move budget above the minimum. */
   slack: number
-  /** Minimum careless-loss the board should reach; honey placement targets it. */
+  /** Minimum planning pressure the board must reach. */
   planningFloor: number
 }
 
-/** Empty board cells a bee would pass over before it exits or is blocked. */
-function beeRayEmptyCells(
-  bee: GenOccupant,
-  boardSet: ReadonlySet<string>,
-  occSet: ReadonlySet<string>,
-): string[] {
-  const v = DIRECTION_VECTORS[bee.dir]
-  let q = bee.q
-  let r = bee.r
-  const out: string[] = []
-  for (;;) {
-    q += v.q
-    r += v.r
-    const k = axialKey(q, r)
-    if (!boardSet.has(k) || occSet.has(k)) break
-    out.push(k)
-  }
-  return out
-}
-
-/**
- * Try to place `honeyCount` honey cells on bee rays. Keeps only solvable
- * placements, and among those SELECTS FOR TRICKINESS: the placement where
- * mindless play strands most often (measured against the real budget = minMoves
- * + slack). This is what turns honey from forced busywork — where careless play
- * still wins — into a genuine ordering puzzle. Returns null if nothing solvable.
- */
-function addHoney(
-  occupants: GenOccupant[],
-  boardCells: ReadonlyArray<Cell>,
-  boardSet: ReadonlySet<string>,
-  honeyCount: number,
-  slack: number,
-  planningFloor: number,
-  seed: number,
-): { cells: Array<[number, number]>; minMoves: number; trick: number } | null {
-  const occSet = new Set(occupants.map((o) => axialKey(o.q, o.r)))
-  const goals = occupants.filter((o) => o.kind !== 'hornet').length
-  const candSet = new Set<string>()
-  for (const o of occupants) {
-    if (o.kind === 'hornet') continue
-    for (const k of beeRayEmptyCells(o, boardSet, occSet)) candSet.add(k)
-  }
-  const candidates = [...candSet]
-  if (candidates.length < honeyCount) return null
-
-  const cellsList = boardCells.map((c) => [c[0], c[1]] as [number, number])
-  const beeSpecs: BeeSpec[] = occupants.map((o) => ({ q: o.q, r: o.r, dir: o.dir, kind: o.kind }))
-  const rng = makeRng(mixSeed(seed, 0x0f0f0f))
-  const searchMax = goals * 2 + 8
-
-  // Aim to clear the level's rising trap floor; keep searching (up to a bigger
-  // budget when the floor is high) for the trickiest solvable placement.
-  const target = Math.max(0.6, planningFloor)
-  const maxTries = planningFloor >= 0.6 ? 100 : 60
-
-  let best: { cells: Array<[number, number]>; minMoves: number; trick: number } | null = null
-
-  for (let t = 0; t < maxTries; t++) {
-    const pool = [...candidates]
-    const chosen: Array<[number, number]> = []
-    for (let i = 0; i < honeyCount && pool.length > 0; i++) {
-      const idx = Math.floor(rng() * pool.length)
-      const [k] = pool.splice(idx, 1)
-      const [q, r] = k.split(',').map(Number)
-      chosen.push([q, r])
-    }
-    const searchBoard = new BoardState({
-      id: 0,
-      cells: cellsList,
-      honeyCells: chosen,
-      bees: beeSpecs,
-      moveBudget: 999,
-      threeStarSpare: 0,
-    })
-    const m = searchMinMoves(searchBoard, searchMax)
-    if (m === null || m <= goals) continue // unsolvable or honey never triggers
-
-    // Measure how much this placement punishes careless play, at the real budget.
-    const realBoard = new BoardState({
-      id: 0,
-      cells: cellsList,
-      honeyCells: chosen,
-      bees: beeSpecs,
-      moveBudget: m + slack,
-      threeStarSpare: 0,
-    })
-    // Optimise for the planning-pressure signal: how often competent,
-    // non-searching play still fails. Random-play loss is not a usable target
-    // (see smartGreedyLossRate docs).
-    const trick = smartGreedyLossRate(realBoard, 40, mixSeed(seed, t + 1))
-
-    if (!best || trick > best.trick) best = { cells: chosen, minMoves: m, trick }
-    if (best.trick >= target) break // meets the floor with margin — stop early
-  }
-
-  return best
-}
-
-/** Build one solvability-guaranteed board (bees + optional queen/hornets), no honey. */
+/** Build one bump-free-solvable board (bees + optional queen/hornets). */
 function buildStructural(
   req: GenRequest,
   boardSet: ReadonlySet<string>,
@@ -277,21 +187,20 @@ function buildStructural(
   return best
 }
 
-/** Smart-greedy loss of a finished board at its real budget (the difficulty signal). */
-function measurePlanningPressure(
+function toBoardState(
   req: GenRequest,
   board: GenBoard,
-  seed: number,
-): number {
-  const realBoard = new BoardState({
+  moveBudget: number,
+): BoardState {
+  return new BoardState({
     id: 0,
     cells: req.boardCells.map((c) => [c[0], c[1]] as [number, number]),
     honeyCells: board.honeyCells,
+    dryMoves: req.dryMoves,
     bees: board.occupants.map((o) => ({ q: o.q, r: o.r, dir: o.dir, kind: o.kind })),
-    moveBudget: board.minMoves + req.slack,
+    moveBudget,
     threeStarSpare: 0,
   })
-  return smartGreedyLossRate(realBoard, 100, mixSeed(seed, 0xbeef))
 }
 
 export function generateLevel(req: GenRequest): GenBoard {
@@ -299,43 +208,68 @@ export function generateLevel(req: GenRequest): GenBoard {
   for (const [q, r] of req.boardCells) boardSet.add(axialKey(q, r))
   const boardCells = req.boardCells.length
 
-  // A single board layout can happen to leave the queen buried or the honey
-  // toothless (careless play sails through). So we RESTART with fresh layouts,
-  // measure the ground-truth careless-loss of each, and keep the board that best
-  // punishes mindless play — stopping as soon as one clears the level's floor
-  // with margin. Plain tutorial boards need no such search.
-  // Honey-only boards bite only on a lucky-enough layout, so give them the most
-  // restarts; honey+queen and queen-only land reliably with a few.
-  const restarts = req.honey > 0 ? (req.hasQueen ? 6 : 14) : req.hasQueen ? 4 : 1
-  const stopAt = Math.max(0.6, req.planningFloor + 0.05)
+  // One layout can easily come out toothless — every bee heading a different way
+  // so no trail ever matters. So build several, measure how hard each really is
+  // to order, and pick by that measurement.
+  //
+  // AIM AT THE FLOOR, don't maximise. Taking the meanest layout every time gives
+  // a jagged curve (a 96%-loss board landing at level 60 next to a free one), so
+  // we take the gentlest layout that still clears the level's floor and only
+  // reach for the hardest when nothing clears it.
+  const restarts = req.dryMoves > 0 ? 22 : 4
+  const target = req.planningFloor + 0.08
 
-  let best: GenBoard | null = null
-  for (let s = 0; s < restarts; s++) {
-    const seed = mixSeed(req.seed, s * 0x9e3779b1)
-    const board = buildStructural(req, boardSet, boardCells, seed)
-
-    // Honey: validated by full search (it breaks greedy monotonicity) and placed
-    // to target the level's rising careless-loss floor.
-    if (req.honey > 0) {
-      const added = addHoney(
-        board.occupants,
-        req.boardCells,
-        boardSet,
-        req.honey,
-        req.slack,
-        req.planningFloor,
-        seed,
-      )
-      if (added) {
-        board.honeyCells = added.cells
-        board.minMoves = added.minMoves
-      }
-    }
-
-    board.planningLoss = measurePlanningPressure(req, board, seed)
-    if (!best || board.planningLoss > best.planningLoss) best = board
-    if (best.planningLoss >= stopAt) break
+  const costOf = (loss: number, minMoves: number, goals: number): number => {
+    const miss = loss < req.planningFloor ? 100 + (req.planningFloor - loss) : Math.abs(loss - target)
+    // Mild nudge towards boards a perfect run can clear in one tap per bee.
+    return miss + (minMoves - goals) * 0.05
   }
 
-  return best as GenBoard
+  let best: GenBoard | null = null
+  let bestCost = Infinity
+
+  const sweep = (salt: number, spare: number): void => {
+    for (let s = 0; s < restarts; s++) {
+      if (bestCost <= 0.06) return // close enough to the target; stop burning CPU
+      const seed = mixSeed(req.seed, mixSeed(salt, s * 0x9e3779b1))
+      const board = buildStructural(req, boardSet, boardCells, seed)
+      const goals = board.metrics.beeCount
+
+      // How few taps can clear it once the trail is in play? Allow a few forced
+      // honey-stops: rejecting anything that is not one-tap-per-bee silently
+      // selects for boards where the trail never gets in the way, which is the
+      // opposite of what these levels are for.
+      const minMoves = searchMinMoves(toBoardState(req, board, 999), goals + spare)
+      if (minMoves === null) continue // no line within reach — unusable
+      board.minMoves = minMoves
+      board.planningLoss = smartGreedyLossRate(
+        toBoardState(req, board, minMoves + req.slack),
+        80,
+        mixSeed(seed, 0xbeef),
+      )
+
+      const cost = costOf(board.planningLoss, minMoves, goals)
+      if (cost < bestCost) {
+        best = board
+        bestCost = cost
+      }
+    }
+  }
+
+  sweep(0, 3)
+  // A crowded late board can be hard enough that EVERY layout needs more than
+  // three forced stops, so the first sweep rejects them all and keeps whichever
+  // freak sparse layout it could validate. Widening the allowance rescues those
+  // levels; it is only worth the CPU when the first sweep missed the floor.
+  if (bestCost >= 100) sweep(0x51ed, 6)
+
+  // Nothing measured cleanly (search capped on every layout): fall back to a
+  // structural board so the run still produces a level and the caller's
+  // validation reports it rather than crashing.
+  if (!best) {
+    const board = buildStructural(req, boardSet, boardCells, req.seed)
+    board.minMoves = board.metrics.beeCount
+    best = board
+  }
+  return best
 }

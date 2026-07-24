@@ -1,18 +1,23 @@
 import Phaser from 'phaser'
-import { GAME_WIDTH, GAME_HEIGHT, colors } from '../config/gameConfig'
+import { GAME_WIDTH, colors } from '../config/gameConfig'
 import { LEVEL_COUNT } from '../levels'
 import { CHAPTER_THEMES, themeForChapter, type ChapterTheme } from '../config/theme'
-import { purchaseService } from '../systems/PurchaseService'
 import { saveManager } from '../systems/SaveManager'
+import { adService } from '../systems/AdService'
 import { paintBackground, type Background } from '../utils/background'
 import { t, type StringKey } from '../i18n'
-import { makeButton, makeIconButton, FONT_STACK } from '../utils/ui'
+import { makeIconButton, FONT_STACK } from '../utils/ui'
 
+/**
+ * The level map, and nothing else. The store row and the Continue button moved
+ * to HomeScene: they used to live down here, which pushed the last grid row and
+ * the page dots into the bottom of the screen where the ad banner sits.
+ */
 const CHAPTER_SIZE = 25
 const COLS = 5
 const ROWS = 5
-const GRID_TOP = 340
-const GRID_BOTTOM = 958
+const GRID_TOP = 352
+const GRID_BOTTOM = 976
 const GRID_LEFT = 112
 const GRID_RIGHT = GAME_WIDTH - 112
 
@@ -42,36 +47,27 @@ export class MenuScene extends Phaser.Scene {
     this.buildChapterNav()
     this.buildDots()
     this.renderChapter(this.currentChapter)
-    this.buildStoreRow()
 
-    // Continue button always resumes the player's current level — label it with
-    // that level number so it's clear it isn't "play the chapter you're browsing".
-    makeButton(
-      this,
-      GAME_WIDTH / 2,
-      GAME_HEIGHT - 78,
-      t('menu.continue', { n: saveManager.currentLevel }),
-      () => this.startLevel(saveManager.currentLevel),
-      { width: 420, height: 88, fontSize: 32, accent: theme.accent },
-    ).setDepth(50)
+    void adService.showBanner()
   }
 
   /**
-   * Stat pills sit on their own row ABOVE the wordmark. Side by side, the 68px
-   * title spans x≈191–529 and ran straight into both pills (38–214, 506–682);
-   * stacking is the only arrangement that stays clear at this width.
+   * Back arrow on the left, then the stat pills. The pills sit on their own row
+   * ABOVE the wordmark: side by side, the title runs straight into both of them
+   * at this width.
    */
   private buildHeader(): void {
-    this.statPill(38, 44, 176, `${saveManager.totalStars()}/${LEVEL_COUNT * 3}`, colors.starGold, colors.hudTextCss, 26)
+    makeIconButton(this, 62, 72, '‹', () => this.scene.start('Home'), 32).setDepth(60)
+    this.statPill(122, 44, 176, `${saveManager.totalStars()}/${LEVEL_COUNT * 3}`, colors.starGold, colors.hudTextCss, 26)
     this.statPill(GAME_WIDTH - 214, 44, 176, String(saveManager.honey), colors.honey, colors.honeyCss, 30)
 
     this.add
-      .text(GAME_WIDTH / 2, 140, t('app.title'), {
+      .text(GAME_WIDTH / 2, 152, t('menu.levels'), {
         fontFamily: FONT_STACK,
-        fontSize: '64px',
+        fontSize: '52px',
         color: '#ffd23f',
         stroke: '#241708',
-        strokeThickness: 9,
+        strokeThickness: 8,
       })
       .setOrigin(0.5)
   }
@@ -119,98 +115,14 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.6)
 
-    makeIconButton(this, 60, 222, '‹', () => this.changeChapter(-1), 34)
-    makeIconButton(this, GAME_WIDTH - 60, 222, '›', () => this.changeChapter(1), 34)
-  }
-
-  /**
-   * Store controls: buy "remove ads", plus the Restore control Apple requires
-   * any app selling a non-consumable to expose. Native only — on web there is
-   * no store, so the row is simply absent.
-   */
-  private buildStoreRow(): void {
-    if (!purchaseService.storeAvailable) return
-    const y = 1096
-
-    if (!purchaseService.adsRemoved) {
-      const price = purchaseService.removeAdsPrice
-      makeButton(
-        this,
-        250,
-        y,
-        price ? t('store.removeAdsPrice', { price }) : t('store.removeAds'),
-        () => void this.buyRemoveAds(),
-        { width: 300, height: 54, fontSize: 22, primary: false },
-      ).setDepth(50)
-    } else {
-      this.add
-        .text(250, y, t('store.adsRemoved'), {
-          fontFamily: FONT_STACK,
-          fontSize: '22px',
-          color: colors.honeyCss,
-        })
-        .setOrigin(0.5)
-        .setDepth(50)
-    }
-
-    makeButton(this, 520, y, t('store.restore'), () => void this.restorePurchases(), {
-      width: 180,
-      height: 54,
-      fontSize: 19,
-      primary: false,
-    }).setDepth(50)
-  }
-
-  private async buyRemoveAds(): Promise<void> {
-    const res = await purchaseService.buyRemoveAds()
-    if (res.ok) {
-      this.showToast(t('store.adsRemoved'))
-      this.scene.restart() // redraw the row without the buy button
-      return
-    }
-    if (res.reason === 'cancelled') return // silent: the player chose to back out
-    this.showToast(
-      res.reason === 'pending'
-        ? t('store.pending')
-        : res.reason === 'unavailable'
-          ? t('store.unavailable')
-          : t('store.failed'),
-    )
-  }
-
-  private async restorePurchases(): Promise<void> {
-    const res = await purchaseService.restore()
-    if (res.ok) {
-      this.showToast(t('store.restored'))
-      this.scene.restart()
-    } else {
-      this.showToast(res.reason === 'unavailable' ? t('store.unavailable') : t('store.nothingToRestore'))
-    }
-  }
-
-  /** Brief, non-blocking feedback message near the bottom of the menu. */
-  private showToast(message: string): void {
-    const label = this.add
-      .text(GAME_WIDTH / 2, 1030, message, {
-        fontFamily: FONT_STACK,
-        fontSize: '24px',
-        color: colors.hudTextCss,
-        backgroundColor: '#00000099',
-        padding: { x: 18, y: 10 },
-      })
-      .setOrigin(0.5)
-      .setDepth(300)
-    this.tweens.add({
-      targets: label,
-      alpha: 0,
-      delay: 1800,
-      duration: 400,
-      onComplete: () => label.destroy(),
-    })
+    // Flanking the chapter name, not parked at the screen edges: at the edges
+    // they sat directly under the back arrow and read as a second back button.
+    makeIconButton(this, 176, 214, '‹', () => this.changeChapter(-1), 32)
+    makeIconButton(this, GAME_WIDTH - 176, 214, '›', () => this.changeChapter(1), 32)
   }
 
   private buildDots(): void {
-    const y = GRID_BOTTOM + 66
+    const y = GRID_BOTTOM + 76
     const n = CHAPTER_THEMES.length
     const spacing = 30
     const startX = GAME_WIDTH / 2 - ((n - 1) * spacing) / 2

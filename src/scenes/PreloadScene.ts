@@ -13,6 +13,13 @@ export class PreloadScene extends Phaser.Scene {
     super('Preload')
   }
 
+  preload(): void {
+    // The one shipped bitmap: the home-screen wordmark art. Everything else is
+    // still drawn at runtime. base './' keeps this resolvable from Capacitor's
+    // file:// webview, same as the bundle.
+    this.load.image('logo', 'logo.png')
+  }
+
   create(): void {
     this.makeHexTexture()
     this.makeBeeVariant('bee', colors.beeBody)
@@ -21,7 +28,7 @@ export class PreloadScene extends Phaser.Scene {
     this.makeCrownTexture()
     this.makeHoneyTexture()
     this.makeDotTexture()
-    this.scene.start('Menu')
+    this.scene.start('Home')
   }
 
   /** Pointy-top hexagon vertices (vertex at 12 o'clock). */
@@ -94,41 +101,48 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   /**
-   * A hornet: a permanent, immovable blocker. Drawn as a hard, armored
-   * hexagonal shell with hazard chevrons and rivets — a deliberately non-bee,
-   * "wall / can't move" silhouette (no round body, no wings, no arrow).
+   * A blocker: a permanent, immovable wall filling its cell. Drawn as a cold
+   * grey STONE BLOCK with brick seams and corner rivets — deliberately not a
+   * bee (round + yellow) and not honey (glossy amber), and with NO arrows or
+   * chevrons, which on the old hornet read as a flight direction.
    */
   private makeHornetTexture(): void {
     const g = this.make.graphics({}, false)
-    const shell = 0x5a1a12
-    const shellDark = 0x2a0a06
-    const edge = 0x120403
-    const hazard = 0xf2b03a
+    const stone = 0x6b7280
+    const stoneDark = 0x3a4049
+    const stoneLight = 0x8a919c
+    const edge = 0x20242b
+    const seam = 0x2c313a
 
-    // Hard hexagonal armored shell (pointy-top, distinct from the round bee).
-    const shellPts = this.hexPoints(64, 64, 54)
-    g.fillStyle(shell, 1)
+    // Solid stone hexagon (pointy-top), heavy dark rim, a lighter top bevel so
+    // it reads as a raised, chunky block rather than a flat tile.
+    const shellPts = this.hexPoints(64, 64, 56)
+    g.fillStyle(stoneDark, 1)
+    g.fillPoints(this.hexPoints(66, 68, 56), true) // drop shadow
+    g.fillStyle(stone, 1)
     g.fillPoints(shellPts, true)
+    g.fillStyle(stoneLight, 0.5)
+    g.fillEllipse(64, 42, 70, 26) // top sheen
     g.lineStyle(7, edge, 1)
     g.strokePoints(shellPts, true, true)
-    // Inner bevel
-    g.lineStyle(3, shellDark, 1)
-    g.strokePoints(this.hexPoints(64, 64, 44), true, true)
 
-    // Hazard chevrons across the middle → reads as "danger / barrier".
-    g.lineStyle(9, hazard, 1)
-    for (let i = -1; i <= 1; i++) {
-      const cx = 58 + i * 22
-      g.beginPath()
-      g.moveTo(cx - 10, 46)
-      g.lineTo(cx + 6, 64)
-      g.lineTo(cx - 10, 82)
-      g.strokePath()
-    }
+    // Brick seams — offset rows, the universal "wall" cue. Clipped visually by
+    // the rim; drawn straight since the block is small on screen.
+    g.lineStyle(4, seam, 1)
+    g.beginPath()
+    g.moveTo(20, 50); g.lineTo(108, 50) // top course
+    g.moveTo(20, 78); g.lineTo(108, 78) // bottom course
+    g.moveTo(64, 30); g.lineTo(64, 50) // vertical joints, offset per row
+    g.moveTo(44, 50); g.lineTo(44, 78)
+    g.moveTo(84, 50); g.lineTo(84, 78)
+    g.moveTo(64, 78); g.lineTo(64, 98)
+    g.strokePath()
 
-    // Corner rivets
-    g.fillStyle(shellDark, 1)
-    for (const p of this.hexPoints(64, 64, 40)) g.fillCircle(p.x, p.y, 4.5)
+    // Corner rivets = bolted in place, cannot move.
+    g.fillStyle(stoneDark, 1)
+    for (const p of this.hexPoints(64, 64, 44)) g.fillCircle(p.x, p.y, 4)
+    g.fillStyle(stoneLight, 0.8)
+    for (const p of this.hexPoints(64, 64, 44)) g.fillCircle(p.x - 1, p.y - 1, 1.6)
 
     g.generateTexture('hornet', 128, 128)
     g.destroy()

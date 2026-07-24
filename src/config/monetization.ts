@@ -46,12 +46,11 @@ export const AD_UNITS = USE_TEST_ADS ? TEST_IOS : LIVE_IOS
  */
 export const ADS = {
   /**
-   * The banner runs during play only, never on the menu. It is a NATIVE view
-   * pinned to the bottom of the screen, so it sits above the web view rather
-   * than inside the game canvas: on the board screen everything below y=1100
-   * (of 1280) is empty, so it can never cover the board, but the menu's
-   * "Continue" button reaches y=1246 and would be clipped on iPad-shaped
-   * screens, where the canvas fills the height and leaves no letterbox.
+   * The banner runs on every screen. It is a NATIVE view pinned to the bottom of
+   * the SCREEN, sitting above the web view rather than inside the game canvas,
+   * so nothing may be drawn below `layout.bannerSafeBottom` (1130 of 1280) on
+   * any scene — on a 4:3 iPad the canvas fills the height and leaves no
+   * letterbox for the bar to occupy.
    */
   bannerDuringPlay: true,
   /** No interstitials at all before this level — let players get hooked first. */

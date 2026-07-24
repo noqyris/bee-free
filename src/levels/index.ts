@@ -11,6 +11,7 @@ const LEVELS: ReadonlyArray<LevelData> = generated.levels.map((l) => ({
   chapter: l.chapter,
   cells: l.cells.map((c) => [c[0], c[1]] as readonly [number, number]),
   honeyCells: (l.honeyCells ?? []).map((c) => [c[0], c[1]] as readonly [number, number]),
+  dryMoves: l.dryMoves ?? 0,
   bees: l.bees.map(
     (b): BeeSpec => ({ q: b.q, r: b.r, dir: b.dir as Direction, kind: b.kind as OccupantKind }),
   ),

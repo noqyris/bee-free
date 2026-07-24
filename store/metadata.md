@@ -7,6 +7,12 @@ word across name + subtitle + keywords, that just wastes the 100-char budget.
 
 Pushed to App Store Connect by `scripts/aso-push.mjs` (English (U.S.) locale).
 
+> The **description** and **promotional text** below were rewritten for the honey-
+> TRAIL mechanic (every flight leaves sticky honey behind it) that replaced the
+> old static-honey design. They still need re-pushing before the 1.0 submission —
+> the earlier push carried the old copy. The name / subtitle / keywords are
+> unchanged and still accurate.
+
 ## Name — 30 char limit
 ```
 Bee Free: Hive Escape Puzzle
@@ -28,28 +34,30 @@ are indexed separately by Apple, so "bee"(name)+"bees"(here) both count.
 
 ## Promotional text — 170 char limit (editable without review)
 ```
-New: 150 hand-tuned levels that actually make you think — plan the order or a single bee gets stuck in the honey and strands the whole hive. No timers, play at your pace.
+New: 150 hand-tuned levels. Every bee leaves a honey trail behind it — fly into fresh honey and you stick, so the ORDER is the whole puzzle. No timers, play at your pace.
 ```
 
 ## Description — 4000 char limit
 ```
 Free the bees, one clever move at a time.
 
-Every bee faces one direction. Tap it and it flies straight — escaping the hive
-if the path is clear, or bumping back and wasting a move if it's blocked. Simple
-to pick up. The catch is the honey: a bee that flies through an open honey cell
-gets STUCK there and becomes a wall of its own. Move in the wrong order and you
-strand yourself with no way out.
+Every bee faces one direction. Tap it and it flies straight out — escaping the
+hive if the path is clear, or bumping back and wasting a move if it's blocked.
+Simple to pick up. The twist: every bee smears honey across each cell it flies
+over, and that honey stays sticky for a few moves. Send a bee into a trail that's
+still fresh and it stops dead in the honey, becoming a wall of its own.
 
-That one twist turns a cozy tapping game into a real planning puzzle. You're not
-reacting — you're reading the board, working out the order, and undoing the ones
-that go wrong.
+So the whole game is the ORDER. Fly this one first and its trail blocks the lane
+the next one needs; wait a move and it dries just in time. You're not reacting —
+you're reading the board, planning the sequence, and undoing the ones that go
+wrong. The honey dries on a timer you can see, so every move is a small puzzle.
 
 • 150 hand-tuned levels across 6 chapters, each one verified solvable
-• Difficulty that genuinely climbs — the last chapters will make you stop and think
+• Difficulty that genuinely climbs — honey stays sticky longer and the boards
+  fill up, until every move has to be planned
 • Honeycomb boards of every shape, plus queen bees that must leave last and
   hornets that never move
-• No timers, no energy, no pressure — think as long as you like
+• No timers on YOU — think as long as you like; only the honey is on a clock
 • Play offline, anywhere
 • One-handed, portrait, pick-up-and-go
 

@@ -49,7 +49,14 @@ export const layout = {
   // hudTopY with a 42px face) or the two visibly collide on device.
   movesPillY: 198,
   boardTop: 286,
-  boardBottom: 1150,
+  // The AdMob banner is a NATIVE bar pinned to the bottom of the screen, above
+  // the web view, so it does not respect canvas coordinates. On a tall phone the
+  // canvas letterboxes and the bar sits in the black band, but on a 4:3 iPad the
+  // canvas fills the height and the bar eats into it. 1110 of 1280 leaves ~13%
+  // clear, which covers a 50pt banner plus the home indicator on every device.
+  boardBottom: 1110,
+  /** Canvas y below which no scene may put anything, for the same reason. */
+  bannerSafeBottom: 1130,
   boardPaddingX: 40,
   maxCellSize: 74,
   minCellSize: 15,

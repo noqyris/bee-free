@@ -57,6 +57,11 @@ export interface LevelData {
   readonly cells: ReadonlyArray<readonly [number, number]>
   /** Honey cells [q, r]: a bee flying through an empty one gets stuck there. */
   readonly honeyCells?: ReadonlyArray<readonly [number, number]>
+  /**
+   * How many moves the honey a flying bee leaves behind stays sticky for.
+   * 0 disables the trail entirely (used by unit tests of the base rules).
+   */
+  readonly dryMoves?: number
   readonly bees: ReadonlyArray<BeeSpec>
   readonly moveBudget: number
   /** Moves that must be left over (>=) on a win to earn 3 stars. */

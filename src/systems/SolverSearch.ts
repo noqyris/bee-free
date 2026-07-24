@@ -2,45 +2,71 @@ import { BoardState } from './BoardState'
 import { makeRng, mixSeed } from '../utils/rng'
 
 /**
- * Honey breaks the "removing a bee only unblocks" monotonicity (a bee flying
- * through honey gets STUCK and becomes a new blocker), so greedy no longer
- * proves solvability — order genuinely matters and you can strand yourself.
+ * Minimum taps to clear every goal, or null if that is impossible within
+ * `maxMoves` (or if the search blew past `cap` expansions, in which case the
+ * caller should treat the board as unusable rather than trust a guess).
  *
- * This is a real breadth-first search over board configurations that drives the
- * actual BoardState rules (escape / bump / stuck / queen-last), so validation
- * and runtime can never disagree. Returns the minimum number of taps to clear
- * all goals, or null if unsolvable within `maxMoves` (or if the search exceeds
- * `cap` states, in which case the caller treats the board as too hard / rejects).
+ * This drives the real BoardState rules — escape / bump / stuck / queen-last /
+ * honey trail — so validation and runtime can never disagree.
+ *
+ * It is iterative-deepening DFS rather than the breadth-first search this used
+ * to be. The honey trail is part of the position, so two different orders no
+ * longer converge on one state and BFS degenerated into enumerating
+ * permutations. Deepening on the move budget with h = "one tap per goal left"
+ * prunes that flat: at the tightest bound every tap MUST remove a goal, so any
+ * line where a bee gets stuck in a trail is cut the moment it happens. Boards
+ * that are perfectly orderable — the ones we ship — are therefore found at the
+ * very first bound.
  *
  * The passed board should have an effectively unbounded budget so taps are not
  * refused mid-search; the caller derives the real budget from the result.
  */
-export function searchMinMoves(start: BoardState, maxMoves: number, cap = 400_000): number | null {
-  if (start.remaining === 0) return 0
-  const visited = new Set<string>([start.stateKey()])
-  let frontier: BoardState[] = [start]
-  let depth = 0
-  let expanded = 0
+export function searchMinMoves(start: BoardState, maxMoves: number, cap = 300_000): number | null {
+  const goals = start.remaining
+  if (goals === 0) return 0
+  if (maxMoves < goals) return null
 
-  while (frontier.length > 0 && depth < maxMoves) {
-    const next: BoardState[] = []
-    for (const state of frontier) {
-      for (const occ of state.allOccupants()) {
-        if (!occ.isTappable()) continue // hornets, etc.
-        const child = state.clone()
-        const outcome = child.tap(occ.q, occ.r)
-        if (!outcome || outcome.kind === 'blocked') continue // a bump is a wasted move
-        if (child.status === 'lost') continue // queen left early on this branch
-        if (child.remaining === 0) return depth + 1
-        const key = child.stateKey()
-        if (visited.has(key)) continue
-        visited.add(key)
-        if (++expanded > cap) return null
-        next.push(child)
+  let nodes = 0
+  let capped = false
+
+  const dfs = (state: BoardState, used: number, bound: number, seen: Map<string, number>): boolean => {
+    // h = one tap per remaining goal. Admissible (nothing clears two at once),
+    // and it is what makes the tight bounds cheap.
+    if (used + state.remaining > bound) return false
+    const key = state.stateKey()
+    const bestSoFar = seen.get(key)
+    if (bestSoFar !== undefined && bestSoFar <= used) return false
+    seen.set(key, used)
+
+    // Tracing first avoids cloning for moves we would throw away, and lets us
+    // try clean escapes before honey-stops (the answer is usually all escapes).
+    const moves = state
+      .allOccupants()
+      .filter((o) => o.isTappable())
+      .map((o) => ({ occ: o, out: state.trace(o) }))
+      // A bump burns a move and smears more honey — never part of a best line.
+      .filter((m) => m.out.kind !== 'blocked')
+      .sort((a, b) => (a.out.kind === 'escaped' ? 0 : 1) - (b.out.kind === 'escaped' ? 0 : 1))
+
+    for (const move of moves) {
+      if (nodes >= cap) {
+        capped = true
+        return false
       }
+      nodes++
+      const child = state.clone()
+      child.tap(move.occ.q, move.occ.r)
+      if (child.status === 'lost') continue // queen left early on this branch
+      if (child.remaining === 0) return true
+      if (dfs(child, used + 1, bound, seen)) return true
     }
-    frontier = next
-    depth++
+    return false
+  }
+
+  const root = start.cloneWithBudget(Number.MAX_SAFE_INTEGER)
+  for (let bound = goals; bound <= maxMoves; bound++) {
+    if (dfs(root, 0, bound, new Map())) return bound
+    if (capped) return null
   }
   return null
 }
@@ -77,16 +103,19 @@ export function carelessLossRate(start: BoardState, trials: number, seedBase: nu
 
 /**
  * Fraction of COMPETENT-but-non-searching playthroughs that LOSE — the honest
- * measure of whether a level demands planning.
+ * measure of whether a level demands planning, and the signal the whole
+ * difficulty curve is tuned against.
  *
  * `carelessLossRate` above measures random play, which wildly overstates
- * difficulty: on a honey-free board "tap any clear bee, save the queen for last"
- * ALWAYS wins (removing a bee only unblocks others), yet random play loses ~96%
- * of the time there. Such a level scores as brutal and plays as free.
+ * difficulty: with no honey in play, "tap any clear bee, save the queen for
+ * last" ALWAYS wins (removing a bee only unblocks others), yet random play
+ * loses ~96% of the time there. Such a level scores as brutal and plays as free.
  *
  * This bot instead plays the obvious good strategy — never bump, never release
  * the queen early, prefer a clean escape over gluing a bee into honey — but does
- * NOT look ahead. When it still loses, the level genuinely requires a plan.
+ * NOT look ahead, so it cannot see that today's clean escape lays a trail across
+ * the lane the next bee needs. When it still loses, the level genuinely requires
+ * a plan, which is exactly what the honey trail is there to demand.
  */
 export function smartGreedyLossRate(start: BoardState, trials: number, seedBase: number): number {
   let losses = 0
@@ -121,8 +150,8 @@ export function smartGreedyLossRate(start: BoardState, trials: number, seedBase:
 }
 
 /**
- * A safe next tap for the runtime hint on honey boards: the first tap (escape or
- * stuck) that keeps the board solvable. Falls back to null if none.
+ * A safe next tap for the runtime hint: the first tap (escape or stuck) that
+ * keeps the board winnable in the moves that are left. Falls back to null.
  */
 export function nextSolvingMove(
   board: BoardState,

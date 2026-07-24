@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { GAME_WIDTH, GAME_HEIGHT, colors } from './config/gameConfig'
 import { BootScene } from './scenes/BootScene'
 import { PreloadScene } from './scenes/PreloadScene'
+import { HomeScene } from './scenes/HomeScene'
 import { MenuScene } from './scenes/MenuScene'
 import { GameScene } from './scenes/GameScene'
 import { LevelCompleteScene } from './scenes/LevelCompleteScene'
@@ -17,7 +18,15 @@ const game = new Phaser.Game({
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
   },
-  scene: [BootScene, PreloadScene, MenuScene, GameScene, LevelCompleteScene, LevelFailedScene],
+  scene: [
+    BootScene,
+    PreloadScene,
+    HomeScene,
+    MenuScene,
+    GameScene,
+    LevelCompleteScene,
+    LevelFailedScene,
+  ],
 })
 
 // Dev-only hook for automated QA (screenshot harness reads the active scene).

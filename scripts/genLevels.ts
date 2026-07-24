@@ -35,6 +35,7 @@ interface OutLevel {
   shape: string
   cells: Array<[number, number]>
   honeyCells: Array<[number, number]>
+  dryMoves: number
   bees: OutBee[]
   moveBudget: number
   threeStarSpare: number
@@ -43,7 +44,7 @@ interface OutLevel {
   hornets: number
   hasQueen: boolean
   minMoves: number
-  /** Measured careless-loss (fraction of mindless plays that lose). */
+  /** Measured planning pressure (share of unplanned-but-competent plays that lose). */
   planningLoss: number
   /** The floor this level was required to clear (for the tuning report). */
   planningFloor: number
@@ -61,7 +62,7 @@ function genOne(slot: LevelSlot): { level: OutLevel; failures: string[] } {
     rayBias: slot.rayBias,
     hasQueen: slot.hasQueen,
     hornets: slot.hornets,
-    honey: slot.honey,
+    dryMoves: slot.dryMoves,
     slack: slot.slack,
     planningFloor: slot.planningFloor,
     seed: slot.seed,
@@ -69,7 +70,8 @@ function genOne(slot: LevelSlot): { level: OutLevel; failures: string[] } {
   })
 
   // metrics.beeCount = goal occupants (bees + queen). minMoves accounts for
-  // honey detours (== goals when there is no honey); the budget is over minMoves.
+  // honey-trail detours (== goals on a perfectly orderable board, which is what
+  // the generator selects for); the budget is measured over minMoves.
   const goals = metrics.beeCount
   const moveBudget = minMoves + slot.slack
   if (!metrics.solvable) failures.push(`L${slot.id}: NOT solvable`)
@@ -78,8 +80,6 @@ function genOne(slot: LevelSlot): { level: OutLevel; failures: string[] } {
   if (slot.threeStarSpare > moveBudget - minMoves)
     failures.push(`L${slot.id}: 3-star spare unreachable`)
   if (slot.hasQueen && !metrics.hasQueen) failures.push(`L${slot.id}: queen requested but absent`)
-  if (slot.honey > 0 && honeyCells.length === 0)
-    failures.push(`L${slot.id}: honey requested but none placed solvably`)
 
   return {
     level: {
@@ -88,6 +88,7 @@ function genOne(slot: LevelSlot): { level: OutLevel; failures: string[] } {
       shape: shapeLabel(slot.shape),
       cells: cells.map(([q, r]) => [q, r] as [number, number]),
       honeyCells,
+      dryMoves: slot.dryMoves,
       bees: occupants.map((b) => ({ q: b.q, r: b.r, dir: b.dir, kind: b.kind })),
       moveBudget,
       threeStarSpare: Math.min(slot.threeStarSpare, moveBudget - minMoves),
@@ -173,34 +174,36 @@ writeFileSync(OUT, JSON.stringify({ schema: 1, count: levels.length, levels }, n
 console.log(`\nGenerated ${levels.length} levels in ${((Date.now() - t0) / 1000).toFixed(0)}s → ${OUT}\n`)
 
 // Per-chapter summary for a human sanity check.
-console.log('Chapter | goals(min–max) | depth(min–max) | queens | hornets | honey | careless-loss(avg) | difficulty(avg)')
-console.log('--------|----------------|----------------|--------|---------|-------|--------------------|----------------')
+console.log('Chapter | goals(min–max) | budget(min–max) | dry(min–max) | queens | hornets | forced stops | planning-loss(avg) | difficulty(avg)')
+console.log('--------|----------------|-----------------|--------------|--------|---------|--------------|--------------------|----------------')
 for (let ch = 1; ch <= 6; ch++) {
   const g = levels.filter((l) => l.chapter === ch)
   const goalsOf = (l: OutLevel) => l.bees.filter((b) => b.kind !== 'hornet').length
   const goals = g.map(goalsOf)
-  const depth = g.map((l) => l.depDepth)
+  const budget = g.map((l) => l.moveBudget)
+  const dry = g.map((l) => l.dryMoves)
   const diff = g.map((l) => l.difficulty)
   const queens = g.filter((l) => l.hasQueen).length
   const hornets = g.reduce((a, l) => a + l.hornets, 0)
-  const honeyLvls = g.filter((l) => l.honeyCells.length > 0).length
+  // Levels where even best play must fly into its own honey at least once.
+  const forced = g.filter((l) => l.minMoves > goalsOf(l)).length
   const rng = (a: number[]) => `${Math.min(...a)}–${Math.max(...a)}`
   const avg = (a: number[]) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1)
   const cl = (g.reduce((a, l) => a + l.planningLoss, 0) / g.length) * 100
   console.log(
-    `   ${ch}    |    ${rng(goals).padEnd(11)}| ${rng(depth).padEnd(15)}|   ${String(queens).padEnd(5)}|   ${String(hornets).padEnd(6)}| ${String(honeyLvls).padEnd(6)}|        ${(cl.toFixed(0) + '%').padEnd(11)}|  ${avg(diff)}`,
+    `   ${ch}    |    ${rng(goals).padEnd(11)}|     ${rng(budget).padEnd(12)}|    ${rng(dry).padEnd(10)}|   ${String(queens).padEnd(5)}|   ${String(hornets).padEnd(6)}|      ${String(forced).padEnd(8)}|        ${(cl.toFixed(0) + '%').padEnd(11)}|  ${avg(diff)}`,
   )
 }
 
-// Report any level that failed to reach its rising careless-loss floor.
+// Report any level that failed to reach its rising planning-pressure floor.
 const short = levels.filter((l) => l.planningLoss + 0.02 < l.planningFloor)
 if (short.length > 0) {
-  console.log(`\n${short.length} level(s) BELOW their careless-loss floor (tune the curve):`)
+  console.log(`\n${short.length} level(s) BELOW their planning floor (tune the curve):`)
   for (const l of short)
     console.log(
-      `  L${l.id}: got ${(l.planningLoss * 100).toFixed(0)}% vs floor ${(l.planningFloor * 100).toFixed(0)}%  (honey ${l.honeyCells.length}, queen ${l.hasQueen ? 'Y' : 'n'}, hornets ${l.hornets})`,
+      `  L${l.id}: got ${(l.planningLoss * 100).toFixed(0)}% vs floor ${(l.planningFloor * 100).toFixed(0)}%  (dry ${l.dryMoves}, bees ${l.bees.filter((b) => b.kind !== 'hornet').length}, queen ${l.hasQueen ? 'Y' : 'n'}, hornets ${l.hornets})`,
     )
 } else {
-  console.log('\nAll levels meet their careless-loss floor. ✓')
+  console.log('\nAll levels meet their planning floor. ✓')
 }
 console.log('')

@@ -22,6 +22,8 @@ interface BoardSnapshot {
   status: string
   cellSize: number
   origin: { x: number; y: number }
+  /** Cells currently covered in sticky honey — the trail. */
+  sticky: number
   occupants: Array<{ q: number; r: number; kind: string; outcome: string }>
 }
 
@@ -67,6 +69,7 @@ async function snapshot(page: Page): Promise<BoardSnapshot> {
       status: board.status,
       cellSize: s.cellSize,
       origin: { x: s.origin.x, y: s.origin.y },
+      sticky: board.stickyCells().length,
       occupants: board.allOccupants().map((o: any) => ({
         q: o.q,
         r: o.r,
@@ -102,22 +105,50 @@ test.describe('Bee Free — full playtest', () => {
     await waitForGame(page)
   })
 
-  test('boots into the menu', async ({ page }) => {
-    expect(await activeScenes(page)).toContain('Menu')
+  test('boots into the home screen', async ({ page }) => {
+    expect(await activeScenes(page)).toContain('Home')
+  })
+
+  test('home → levels → board is reachable by tapping', async ({ page }) => {
+    const box = await page.locator('canvas').boundingBox()
+    if (!box) throw new Error('canvas not found')
+    const tapGame = async (gx: number, gy: number) => {
+      const x = box.x + (gx / GAME_W) * box.width
+      const y = box.y + (gy / GAME_H) * box.height
+      await page.mouse.move(x, y)
+      await page.mouse.down()
+      await page.waitForTimeout(60)
+      await page.mouse.up()
+      await page.waitForTimeout(400)
+    }
+
+    await tapGame(GAME_W / 2, 692) // "Levels"
+    await expect.poll(() => activeScenes(page), { timeout: 10_000 }).toContain('Menu')
+
+    await tapGame(112, 336) // first node in the grid
+    await expect.poll(() => activeScenes(page), { timeout: 10_000 }).toContain('Game')
   })
 
   test('plays level 1 to a win and unlocks the next level', async ({ page }) => {
     await startLevel(page, 0)
 
-    // Play greedily: repeatedly fly out any bee whose path is already clear.
-    // Level 1 has no honey, so this always solves it.
+    // Play the obvious competent line: fly out any bee whose path is clear,
+    // and when none is, take a bee that merely gets stuck in the honey rather
+    // than waste the move on a bump. Level 1 is generously budgeted, so this
+    // always finishes it — the levels where it does NOT are the point of the
+    // difficulty curve, and are covered by the unit tests.
     for (let i = 0; i < 30; i++) {
       const snap = await snapshot(page)
       if (snap.remaining === 0) break
-      const free = snap.occupants.filter((o) => o.kind !== 'hornet' && o.outcome === 'escaped')
-      // Save the queen for last — leaving early is an instant loss.
       const goals = snap.occupants.filter((o) => o.kind !== 'hornet').length
-      const pick = free.find((o) => o.kind !== 'queen') ?? (goals === 1 ? free[0] : undefined)
+      // Save the queen for last — leaving early is an instant loss.
+      const usable = snap.occupants.filter(
+        (o) =>
+          o.kind !== 'hornet' &&
+          (o.outcome === 'escaped' || o.outcome === 'stuck') &&
+          !(o.kind === 'queen' && o.outcome === 'escaped' && goals > 1),
+      )
+      const pick = usable.find((o) => o.outcome === 'escaped') ?? usable[0]
       if (!pick) throw new Error(`no safe move at step ${i}`)
       await tapCell(page, snap, pick.q, pick.r)
     }
@@ -157,12 +188,12 @@ test.describe('Bee Free — full playtest', () => {
   })
 
   test('the queen leaving early loses the level', async ({ page }) => {
-    // Find a level where the queen can fly out immediately. She joins at L14
-    // (index 13), but the generator seeds her first and packs bees around her,
-    // so she is blocked at the start on 136 of 137 queen levels — a wide scan is
-    // needed to reach the one board where this rule is observable in the UI.
+    // Find a level where the queen can fly out immediately. She joins at L16
+    // (index 15), but the generator seeds her first and packs bees around her,
+    // so she is blocked at the start on nearly every queen level — a wide scan
+    // is needed to reach a board where this rule is observable in the UI.
     let snap: BoardSnapshot | undefined
-    for (let idx = 13; idx < 80; idx++) {
+    for (let idx = 15; idx < 90; idx++) {
       await startLevel(page, idx)
       const s = await snapshot(page)
       const queen = s.occupants.find((o) => o.kind === 'queen')
@@ -179,35 +210,53 @@ test.describe('Bee Free — full playtest', () => {
     await expect.poll(() => activeScenes(page), { timeout: 10_000 }).toContain('LevelFailed')
   })
 
-  test('honey catches a bee that flies through it', async ({ page }) => {
-    // Honey levels start at L7 (index 6).
-    let found = false
-    for (let idx = 6; idx < 13 && !found; idx++) {
+  test('a flying bee lays a honey trail behind it', async ({ page }) => {
+    await startLevel(page, 20)
+    const snap = await snapshot(page)
+    expect(snap.sticky, 'a fresh board starts clean').toBe(0)
+
+    const flier = snap.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'escaped')
+    if (!flier) throw new Error('no bee with a clear path on level 21')
+    await tapCell(page, snap, flier.q, flier.r)
+
+    const after = await snapshot(page)
+    expect(after.sticky, 'the flight should have smeared honey').toBeGreaterThan(0)
+  })
+
+  test('a fresh trail catches the next bee to cross it', async ({ page }) => {
+    // Fly a bee, then look for someone whose path now ends in the honey. Which
+    // level offers that depends on the layout, so scan a few.
+    let caught = false
+    for (let idx = 20; idx < 34 && !caught; idx++) {
       await startLevel(page, idx)
       const snap = await snapshot(page)
-      const sticky = snap.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'stuck')
-      if (!sticky) continue
-      found = true
+      const flier = snap.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'escaped')
+      if (!flier) continue
+      await tapCell(page, snap, flier.q, flier.r)
 
-      const before = snap.remaining
-      await tapCell(page, snap, sticky.q, sticky.r)
+      const mid = await snapshot(page)
+      const sticky = mid.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'stuck')
+      if (!sticky) continue
+      caught = true
+
+      const before = mid.remaining
+      await tapCell(page, mid, sticky.q, sticky.r)
       const after = await snapshot(page)
-      // The bee did not escape — it relocated onto the honey and still counts.
+      // It did not escape — it stopped in the honey and still counts as a goal.
       expect(after.remaining).toBe(before)
-      expect(after.movesLeft).toBe(snap.movesLeft - 1)
-      const moved = after.occupants.some((o) => o.q !== sticky.q || o.r !== sticky.r)
-      expect(moved).toBe(true)
+      expect(after.movesLeft).toBe(mid.movesLeft - 1)
+      expect(after.occupants.some((o) => o.q !== sticky.q || o.r !== sticky.r)).toBe(true)
     }
-    expect(found, 'expected a honey level with a stickable bee').toBe(true)
+    expect(caught, 'expected a trail to strand a bee somewhere in L21–L34').toBe(true)
   })
 
   test('no store row on web (native-only monetization)', async ({ page }) => {
-    // The menu must not offer purchases in a browser build.
+    // The home screen must not offer purchases in a browser build.
     const hasStore = await page.evaluate(() => {
       const g = (window as any).__game
-      const menu: any = g.scene.getScene('Menu')
-      if (!menu?.scene.isActive()) return false
-      return menu.children.list.some(
+      const home: any = g.scene.getScene('Home')
+      if (!home?.scene.isActive()) return false
+      return home.children.list.some(
         (c: any) => typeof c?.text === 'string' && /Remove Ads|Restore/.test(c.text),
       )
     })

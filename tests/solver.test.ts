@@ -111,7 +111,7 @@ describe('LevelGenerator', () => {
     rayBias: 2.5,
     hornets: 0,
     hasQueen: false,
-    honey: 0,
+    dryMoves: 2,
     slack: 2,
     planningFloor: 0,
   }
@@ -121,19 +121,18 @@ describe('LevelGenerator', () => {
     expect(generateLevel(req).occupants).toEqual(generateLevel(req).occupants)
   })
 
-  it('generates a solvable honey board with a search-derived min-move count', () => {
-    const { honeyCells, minMoves, occupants } = generateLevel({
+  it('derives min moves from a real search of the trail, never from the bee count', () => {
+    const { minMoves, occupants } = generateLevel({
       ...baseReq,
       targetBees: 7,
-      honey: 1,
+      dryMoves: 3,
       seed: 42,
       attempts: 150,
     })
-    // Honey may or may not place on a given seed, but if it does, min moves must
-    // exceed the goal count (a bee gets stuck) and there are no overlaps.
     const keys = new Set(occupants.map((o) => axialKey(o.q, o.r)))
     expect(keys.size).toBe(occupants.length)
-    if (honeyCells.length > 0) expect(minMoves).toBeGreaterThanOrEqual(occupants.length)
+    // One tap per bee is the floor; forced honey-stops only ever add to it.
+    expect(minMoves).toBeGreaterThanOrEqual(occupants.length)
   })
 
   it('always produces a solvable board with no overlapping occupants', () => {

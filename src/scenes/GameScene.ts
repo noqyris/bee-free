@@ -24,6 +24,16 @@ interface GameSceneData {
   levelIndex?: number
 }
 
+/** Pointy-top hexagon outline (vertex at 12 o'clock) around a world point. */
+function hexPoints(cx: number, cy: number, radius: number): Phaser.Types.Math.Vector2Like[] {
+  const pts: Phaser.Types.Math.Vector2Like[] = []
+  for (let i = 0; i < 6; i++) {
+    const a = Phaser.Math.DegToRad(60 * i - 90)
+    pts.push({ x: cx + radius * Math.cos(a), y: cy + radius * Math.sin(a) })
+  }
+  return pts
+}
+
 type EscapedOutcome = Extract<TapOutcome, { kind: 'escaped' }>
 type BlockedOutcome = Extract<TapOutcome, { kind: 'blocked' }>
 type StuckOutcome = Extract<TapOutcome, { kind: 'stuck' }>
@@ -44,6 +54,8 @@ export class GameScene extends Phaser.Scene {
   private comboCount = 0
   private lastEscapeAt = -Infinity
   private previewGfx!: Phaser.GameObjects.Graphics
+  /** Live honey overlays, keyed "q,r" — added, faded and removed as trails dry. */
+  private honeyBlobs = new Map<string, { blob: Phaser.GameObjects.Image; count: Phaser.GameObjects.Text }>()
   private pending?: { occ: CellOccupant; q: number; r: number }
   /** Set when the player took the rewarded-ad revive; caps the win at 1 star. */
   private usedRevive = false
@@ -63,6 +75,7 @@ export class GameScene extends Phaser.Scene {
     const bonus = difficultyDirector.bonusMovesFor(this.level.id)
     this.board = new BoardState({ ...this.level, moveBudget: this.level.moveBudget + bonus })
     this.beeSprites.clear()
+    this.honeyBlobs.clear()
     this.inputLocked = false
     this.comboCount = 0
     this.lastEscapeAt = -Infinity
@@ -72,6 +85,7 @@ export class GameScene extends Phaser.Scene {
     paintBackground(this, this.theme)
     this.layoutBoard()
     this.drawCells()
+    this.refreshHoney(false)
     this.createEmitters()
     this.previewGfx = this.add.graphics().setDepth(90)
     this.spawnOccupants()
@@ -81,11 +95,11 @@ export class GameScene extends Phaser.Scene {
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this)
     this.input.on(Phaser.Input.Events.POINTER_UP, this.onPointerUp, this)
 
-    // The banner runs on the board screen only — nothing here sits below y=1100,
-    // so the native bar at the bottom of the screen can never cover the board.
-    // Phaser reuses scene instances, so tear it down on shutdown, not on destroy.
+    // The banner is up on every screen (Home, level map, board): each of them
+    // keeps its content above layout.bannerSafeBottom, so the native bar at the
+    // bottom of the screen has nowhere to cover. showBanner is idempotent, and
+    // it stays up until a "remove ads" purchase takes it down.
     void adService.showBanner()
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => void adService.hideBanner())
   }
 
   /** Keep each queen's crown pinned above her sprite through idle and flight. */
@@ -127,7 +141,6 @@ export class GameScene extends Phaser.Scene {
 
   private drawCells(): void {
     const s = this.cellSize / 62
-    const honey = new Set((this.level.honeyCells ?? []).map(([q, r]) => `${q},${r}`))
     for (const [q, r] of this.level.cells) {
       const { x, y } = this.cellToWorld(q, r)
       // Themed cell: stroke-colored border hex behind a slightly smaller fill.
@@ -135,9 +148,72 @@ export class GameScene extends Phaser.Scene {
       this.add.image(x, y, 'hex').setScale(s).setTint(this.theme.cellStroke)
       this.add.image(x, y, 'hex').setScale(s * 0.88).setTint(this.theme.cellFill)
       this.add.image(x, y - s * 6, 'hex').setScale(s * 0.6).setTint(0xffffff).setAlpha(0.08)
-      if (honey.has(`${q},${r}`)) {
-        this.add.image(x, y, 'honey').setScale(s * 0.92).setDepth(6)
+    }
+  }
+
+  /**
+   * Sync the honey overlays with the board. The trail is the whole game, so it
+   * has to be legible at a glance AND countable: the blob fades as it dries and
+   * carries the exact number of moves it has left, because "can this bee cross
+   * here yet" is a question the player has to answer precisely, not by vibe.
+   */
+  private refreshHoney(animate: boolean): void {
+    const s = this.cellSize / 62
+    const dry = this.level.dryMoves ?? 0
+    const seen = new Set<string>()
+
+    for (const cell of this.board.stickyCells()) {
+      const key = `${cell.q},${cell.r}`
+      seen.add(key)
+      const { x, y } = this.cellToWorld(cell.q, cell.r)
+      const permanent = !Number.isFinite(cell.movesLeft)
+      // Full strength when fresh, washed out on its last move before drying.
+      const alpha = permanent ? 1 : 0.42 + 0.53 * (cell.movesLeft / Math.max(1, dry))
+
+      let entry = this.honeyBlobs.get(key)
+      if (!entry) {
+        const blob = this.add.image(x, y, 'honey').setScale(s * 0.92).setDepth(6)
+        const count = this.add
+          .text(x, y, '', {
+            fontFamily: FONT_STACK,
+            fontSize: `${Math.round(this.cellSize * 0.44)}px`,
+            color: '#6b3d00',
+          })
+          .setOrigin(0.5)
+          .setDepth(7)
+        entry = { blob, count }
+        this.honeyBlobs.set(key, entry)
+        if (animate) {
+          blob.setScale(s * 0.5)
+          this.tweens.add({
+            targets: blob,
+            scale: s * 0.92,
+            duration: 180,
+            ease: 'Back.easeOut',
+          })
+        }
       }
+      entry.blob.setAlpha(alpha)
+      // One move of stickiness needs no counter — it is gone by the next tap.
+      entry.count.setText(permanent || dry <= 1 ? '' : String(cell.movesLeft))
+      entry.count.setAlpha(alpha)
+    }
+
+    for (const [key, entry] of this.honeyBlobs) {
+      if (seen.has(key)) continue
+      this.honeyBlobs.delete(key)
+      entry.count.destroy()
+      if (!animate) {
+        entry.blob.destroy()
+        continue
+      }
+      this.tweens.add({
+        targets: entry.blob,
+        alpha: 0,
+        scale: s * 0.6,
+        duration: 200,
+        onComplete: () => entry.blob.destroy(),
+      })
     }
   }
 
@@ -227,20 +303,26 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
-  /** One-line contextual coaching for newly introduced mechanics. */
+  /**
+   * One-line contextual coaching, shown only on the level where a rule first
+   * applies. The trail line repeats whenever the honey gets stickier, since
+   * that is a real rule change and the countdown numbers change with it.
+   */
   private showCoach(): void {
     const id = this.level.id
+    const dry = this.level.dryMoves ?? 0
     const kinds = new Set(this.board.allOccupants().map((o) => o.kind))
-    const hasHoney = (this.level.honeyCells?.length ?? 0) > 0
-    let key: 'coach.tap' | 'coach.queen' | 'coach.hornet' | 'coach.honey' | null = null
-    if (id <= 2) key = 'coach.tap'
-    else if (hasHoney && id <= 60) key = 'coach.honey'
-    else if (kinds.has('queen') && id <= 16) key = 'coach.queen'
-    else if (kinds.has('hornet') && id <= 30) key = 'coach.hornet'
+    let key: 'coach.tap' | 'coach.trail' | 'coach.trailDry' | 'coach.queen' | 'coach.hornet' | null =
+      null
+    if (id === 1) key = 'coach.tap'
+    else if (id <= 3) key = 'coach.trail'
+    else if (id === 8 || id === 20 || id === 70) key = 'coach.trailDry'
+    else if (id >= 16 && id <= 18 && kinds.has('queen')) key = 'coach.queen'
+    else if (id >= 30 && id <= 32 && kinds.has('hornet')) key = 'coach.hornet'
     if (!key) return
 
     const banner = this.add
-      .text(GAME_WIDTH / 2, layout.movesPillY + 92, t(key), {
+      .text(GAME_WIDTH / 2, layout.movesPillY + 92, t(key, { n: dry }), {
         fontFamily: FONT_STACK,
         fontSize: '24px',
         color: this.theme.accentCss,
@@ -400,6 +482,18 @@ export class GameScene extends Phaser.Scene {
 
     const g = this.previewGfx
     g.clear()
+
+    // Show the honey this flight is about to leave behind. That mess is the real
+    // cost of the move — without it the player only learns about the trail after
+    // it has already cost them the level.
+    if ((this.level.dryMoves ?? 0) > 0) {
+      g.fillStyle(0xf3a712, 0.32)
+      for (const cell of outcome.path) {
+        const p = this.cellToWorld(cell.q, cell.r)
+        g.fillPoints(hexPoints(p.x, p.y, this.cellSize * 0.88), true)
+      }
+    }
+
     g.lineStyle(Math.max(6, this.cellSize * 0.16), color, 0.85)
     g.beginPath()
     g.moveTo(start.x, start.y)
@@ -679,6 +773,9 @@ export class GameScene extends Phaser.Scene {
 
   private resolveAfterAction(): void {
     this.inputLocked = false
+    // The trail was laid the moment the tap resolved; show it once the bee has
+    // actually made the trip, so the honey appears in its wake.
+    this.refreshHoney(true)
     const status = this.board.status
     if (status === 'won') {
       // 3 stars require finishing with the level's spare margin left; else 2.
