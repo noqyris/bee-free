@@ -34,7 +34,7 @@ const LIVE_IOS = {
 } as const
 
 /** ⚠️ Must be false for the App Store build. */
-export const USE_TEST_ADS = true
+export const USE_TEST_ADS = false
 
 export const AD_UNITS = USE_TEST_ADS ? TEST_IOS : LIVE_IOS
 

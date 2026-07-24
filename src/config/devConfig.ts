@@ -7,4 +7,4 @@
  */
 
 /** Unlock every level regardless of progress, so any level can be tested. */
-export const DEV_UNLOCK_ALL_LEVELS = true
+export const DEV_UNLOCK_ALL_LEVELS = false
