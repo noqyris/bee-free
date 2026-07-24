@@ -14,13 +14,12 @@
 # AdMob's crawler derives the domain from that store listing, so the URL in App
 # Store Connect and the host of this file must match.
 #
-# ── What to put below ─────────────────────────────────────────────────────────
-# Replace pub-0000000000000000 with the real AdMob publisher id (AdMob console →
-# Settings → "Publisher ID", format pub-XXXXXXXXXXXXXXXX). The last field is
-# Google's fixed certification-authority id and never changes.
+# The publisher id below is this AdMob account's real id (pub-3307486877162157,
+# read from the account's existing ca-app-pub-3307486877162157~… app ids). The
+# last field is Google's fixed certification-authority id and never changes.
 #
-# One DIRECT line per network. With only AdMob (no mediation) a single line is
+# One DIRECT line per network. With only AdMob (no mediation) this single line is
 # enough; each mediation partner would add its own line, copied from that
 # partner's app-ads.txt instructions.
 
-google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
+google.com, pub-3307486877162157, DIRECT, f08c47fec0942fa0

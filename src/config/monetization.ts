@@ -20,11 +20,16 @@ const TEST_IOS = {
   banner: 'ca-app-pub-3940256099942544/2934735716',
 } as const
 
-/** Real AdMob ids — replace the empty strings, then flip USE_TEST_ADS to false. */
+/**
+ * Real AdMob ids for the Bee Free iOS app (AdMob account pub-3307486877162157).
+ * These are LIVE — they only take effect when USE_TEST_ADS is false, which must
+ * stay true until the App Store release (see the file header). The game uses
+ * only interstitial + rewarded; there is no banner placement.
+ */
 const LIVE_IOS = {
-  appId: '',
-  interstitial: '',
-  rewarded: '',
+  appId: 'ca-app-pub-3307486877162157~1512685345',
+  interstitial: 'ca-app-pub-3307486877162157/6027359430',
+  rewarded: 'ca-app-pub-3307486877162157/5436598428',
   banner: '',
 } as const
 

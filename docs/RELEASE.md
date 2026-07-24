@@ -21,13 +21,27 @@ flag, which is why the switch is explicit rather than tied to `import.meta.env.D
 
 ## 2. AdMob (BLOCKER for revenue)
 
-1. Create the app in the AdMob console, get the **App ID** (`ca-app-pub-…~…`).
-2. Create two ad units: one **interstitial**, one **rewarded**.
-3. Fill `LIVE_IOS` in `src/config/monetization.ts` with the App ID + unit ids.
-4. Set the same App ID in `ios/App/App/Info.plist` → `GADApplicationIdentifier`.
-5. Set `USE_TEST_ADS = false`.
-6. Add the full SKAdNetwork list from Google's docs to `Info.plist`
-   (`SKAdNetworkItems` currently holds only Google's own id).
+The AdMob app and ad units already exist (account `pub-3307486877162157`) and
+their ids are filled into `LIVE_IOS` in `src/config/monetization.ts`:
+
+| | id |
+|---|---|
+| App ID | `ca-app-pub-3307486877162157~1512685345` |
+| Interstitial | `ca-app-pub-3307486877162157/6027359430` |
+| Rewarded | `ca-app-pub-3307486877162157/5436598428` |
+
+So the only release-day steps are:
+
+1. Set `USE_TEST_ADS = false` in `src/config/monetization.ts`.
+2. Set `GADApplicationIdentifier` in `ios/App/App/Info.plist` to
+   `ca-app-pub-3307486877162157~1512685345` (it currently holds Google's TEST
+   app id, on purpose — that keeps TestFlight builds from touching the real
+   AdMob account before the app is public and AdMob-approved).
+3. Host `store/app-ads.txt` (publisher id already filled) on the store listing's
+   Marketing URL domain — see the app-ads.txt section below.
+
+`SKAdNetworkItems` in `Info.plist` already carries Google's full 50-id list, so
+nothing to do there unless mediation partners are added later.
 
 Pacing lives in `ADS` in `src/config/monetization.ts`: no interstitials before
 level 6, then one every 3rd level result with a 90s cooldown. Ads never show for
