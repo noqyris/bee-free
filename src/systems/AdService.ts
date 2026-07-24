@@ -1,5 +1,10 @@
 import { Capacitor } from '@capacitor/core'
-import { AdMob, AdmobConsentStatus } from '@capacitor-community/admob'
+import {
+  AdMob,
+  AdmobConsentStatus,
+  BannerAdPosition,
+  BannerAdSize,
+} from '@capacitor-community/admob'
 import { AD_UNITS, ADS, USE_TEST_ADS } from '../config/monetization'
 import { saveManager } from './SaveManager'
 
@@ -15,9 +20,10 @@ import { saveManager } from './SaveManager'
  * then one interstitial every N results with a hard cooldown.
  */
 class AdService {
-  private initialized = false
+  private initPromise?: Promise<void>
   private interstitialReady = false
   private rewardedReady = false
+  private bannerShown = false
   private resultsSinceInterstitial = 0
   private lastInterstitialAt = 0
 
@@ -31,9 +37,17 @@ class AdService {
    * That order matters: both must be resolved before the first ad request or
    * Google serves nothing in the EEA.
    */
-  async init(): Promise<void> {
-    if (this.initialized || !this.enabled) return
-    this.initialized = true
+  init(): Promise<void> {
+    if (!this.enabled) return Promise.resolve()
+    // Share ONE in-flight promise. The old version flipped a boolean on entry,
+    // so a second caller returned immediately while the SDK was still resolving
+    // consent/ATT — and anything that then requested an ad (the banner does, as
+    // soon as the board opens) failed silently against an uninitialised SDK.
+    this.initPromise ??= this.runInit()
+    return this.initPromise
+  }
+
+  private async runInit(): Promise<void> {
     try {
       const consent = await AdMob.requestConsentInfo()
       if (consent.isConsentFormAvailable && consent.status === AdmobConsentStatus.REQUIRED) {
@@ -58,7 +72,7 @@ class AdService {
       void this.preloadInterstitial()
       void this.preloadRewarded()
     } catch {
-      this.initialized = false // let a later call retry
+      this.initPromise = undefined // let a later call retry
     }
   }
 
@@ -111,6 +125,42 @@ class AdService {
     }
   }
 
+  /**
+   * Show the bottom banner. Adaptive size so it matches the device width, and
+   * anchored BOTTOM_CENTER — it is a native view over the web view, not part of
+   * the game canvas. Only called from the board screen (see ADS.bannerDuringPlay
+   * for why the menu is excluded).
+   */
+  async showBanner(): Promise<void> {
+    if (!this.enabled || !ADS.bannerDuringPlay || !AD_UNITS.banner) return
+    if (this.bannerShown) return
+    await this.init() // idempotent; resolves once consent + ATT + SDK are done
+    if (!this.enabled) return // a purchase may have landed while we waited
+    this.bannerShown = true // set first: guards against a double show while awaiting
+    try {
+      await AdMob.showBanner({
+        adId: AD_UNITS.banner,
+        adSize: BannerAdSize.ADAPTIVE_BANNER,
+        position: BannerAdPosition.BOTTOM_CENTER,
+        margin: 0,
+        isTesting: USE_TEST_ADS,
+      })
+    } catch {
+      this.bannerShown = false // never let a failed banner wedge the flag
+    }
+  }
+
+  /** Remove the banner (leaving the board, or after a "remove ads" purchase). */
+  async hideBanner(): Promise<void> {
+    if (!this.bannerShown) return
+    this.bannerShown = false
+    try {
+      await AdMob.removeBanner()
+    } catch {
+      // Already gone, or no SDK — nothing to recover.
+    }
+  }
+
   /** True when a rewarded ad can be offered right now. */
   canOfferRewarded(): boolean {
     return this.enabled && this.rewardedReady
@@ -137,6 +187,7 @@ class AdService {
   disableAds(): void {
     this.interstitialReady = false
     this.rewardedReady = false
+    void this.hideBanner()
   }
 }
 

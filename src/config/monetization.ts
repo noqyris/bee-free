@@ -30,7 +30,7 @@ const LIVE_IOS = {
   appId: 'ca-app-pub-3307486877162157~1512685345',
   interstitial: 'ca-app-pub-3307486877162157/6027359430',
   rewarded: 'ca-app-pub-3307486877162157/5436598428',
-  banner: '',
+  banner: 'ca-app-pub-3307486877162157/6918904741',
 } as const
 
 /** ⚠️ Must be false for the App Store build. */
@@ -45,6 +45,15 @@ export const AD_UNITS = USE_TEST_ADS ? TEST_IOS : LIVE_IOS
  * way to lose them, so the first levels are always ad-free.
  */
 export const ADS = {
+  /**
+   * The banner runs during play only, never on the menu. It is a NATIVE view
+   * pinned to the bottom of the screen, so it sits above the web view rather
+   * than inside the game canvas: on the board screen everything below y=1100
+   * (of 1280) is empty, so it can never cover the board, but the menu's
+   * "Continue" button reaches y=1246 and would be clipped on iPad-shaped
+   * screens, where the canvas fills the height and leaves no letterbox.
+   */
+  bannerDuringPlay: true,
   /** No interstitials at all before this level — let players get hooked first. */
   firstLevelWithAds: 6,
   /** Show an interstitial once every N level results. */

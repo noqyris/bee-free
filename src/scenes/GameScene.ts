@@ -18,6 +18,7 @@ import { difficultyDirector } from '../systems/DifficultyDirector'
 import { saveManager } from '../systems/SaveManager'
 import { t } from '../i18n'
 import { makeIconButton, makeRestartButton, FONT_STACK } from '../utils/ui'
+import { adService } from '../systems/AdService'
 
 interface GameSceneData {
   levelIndex?: number
@@ -79,6 +80,12 @@ export class GameScene extends Phaser.Scene {
 
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this)
     this.input.on(Phaser.Input.Events.POINTER_UP, this.onPointerUp, this)
+
+    // The banner runs on the board screen only — nothing here sits below y=1100,
+    // so the native bar at the bottom of the screen can never cover the board.
+    // Phaser reuses scene instances, so tear it down on shutdown, not on destroy.
+    void adService.showBanner()
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => void adService.hideBanner())
   }
 
   /** Keep each queen's crown pinned above her sprite through idle and flight. */
