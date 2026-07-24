@@ -29,6 +29,7 @@ their ids are filled into `LIVE_IOS` in `src/config/monetization.ts`:
 | App ID | `ca-app-pub-3307486877162157~1512685345` |
 | Interstitial | `ca-app-pub-3307486877162157/6027359430` |
 | Rewarded | `ca-app-pub-3307486877162157/5436598428` |
+| Banner | `ca-app-pub-3307486877162157/6918904741` |
 
 So the only release-day steps are:
 
@@ -46,6 +47,14 @@ nothing to do there unless mediation partners are added later.
 Pacing lives in `ADS` in `src/config/monetization.ts`: no interstitials before
 level 6, then one every 3rd level result with a 90s cooldown. Ads never show for
 a player who bought "remove ads".
+
+The **banner runs on the board screen only** (`ADS.bannerDuringPlay`). It is a
+native view pinned to the bottom of the SCREEN, sitting above the web view, so it
+does not respect canvas coordinates. The board screen keeps everything above
+y=1100 of 1280, so the banner can never cover it — but the menu's Continue button
+reaches y=1246, and on iPad-shaped screens the canvas fills the height with no
+letterbox for the banner to occupy, so it would be clipped there. Putting the
+banner on the menu means first compressing that layout.
 
 ### AdMob app verification ("require review" / app-ads.txt)
 
