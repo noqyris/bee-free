@@ -72,13 +72,24 @@ impressions are logged against an unreviewed build.
 The app sells one non-consumable via our own StoreKit 2 bridge
 (`ios/App/App/StoreKitBridgePlugin.swift`) — no third-party purchase service.
 
-1. In App Store Connect → Features → In-App Purchases, create a **Non-Consumable**
-   with product id exactly `com.beefree.hiveescape.removeads`
-   (`PRODUCTS.removeAds` in `src/config/monetization.ts`).
-2. Add a localised display name, description and price tier.
-3. Attach it to the first submission — a new IAP must be reviewed with a build.
-4. Until it exists and is "Ready to Submit", the menu shows "Remove Ads" with no
-   price, and buying resolves as `failed`. That is expected, not a bug.
+The product already exists and is **Ready to Submit**:
+
+| | |
+|---|---|
+| Product id | `com.beefree.hiveescape.removeads` (matches `PRODUCTS.removeAds`) |
+| Type | Non-consumable, not family-sharable |
+| Price | 0.99 USD base (USA), matching the other Noqyris games |
+| Availability | all 175 territories |
+| Review screenshot | menu showing Remove Ads / Restore Purchases |
+
+Remaining: **attach it to the first submission** — a new IAP must be reviewed
+together with a build, so tick it in the version's In-App Purchases section when
+submitting 1.0.
+
+Four things were required before the state left `MISSING_METADATA`, and it is
+easy to miss the last one: localization, a price schedule, a review screenshot,
+**and territory availability** (a separate `inAppPurchaseAvailabilities`
+resource — without it the product looks complete but stays incomplete).
 
 Ownership is read from StoreKit's `Transaction.currentEntitlements`, so restore
 and reinstall work with no server. The local save flag is only a UI cache.

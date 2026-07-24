@@ -58,10 +58,21 @@ Free to play. An optional one-time purchase removes ads forever.
 Can you free the whole hive?
 ```
 
-## Support / Marketing URL
-App Store Connect requires a reachable Support URL to submit. It should be a real
-page; the same domain must host `app-ads.txt` (see store/app-ads.txt) for AdMob
-to verify the app. Set both in App Store Connect once the domain exists.
+## Support / Marketing / Privacy URLs — live and already set
+
+Served by GitHub Pages from the `noqyris/noqyris.github.io` repo:
+
+| | |
+|---|---|
+| Support + Marketing | <https://noqyris.github.io/bee-free/> |
+| Privacy policy | <https://noqyris.github.io/bee-free/privacy.html> |
+| app-ads.txt | <https://noqyris.github.io/app-ads.txt> |
+
+`app-ads.txt` was already on that domain for the other games. Because the file is
+per-DOMAIN and not per-app, its existing
+`google.com, pub-3307486877162157, DIRECT, f08c47fec0942fa0` line already covers
+Bee Free — what mattered was pointing Bee Free's **Marketing URL** at that domain
+so AdMob's crawler looks there.
 
 ## What's New (per-version, first release)
 ```
