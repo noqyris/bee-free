@@ -173,9 +173,19 @@ in the web UI: Apps → **+** → New App, with bundle id `com.beefree.hiveescap
 - `NSUserTrackingUsageDescription` is set — the ATT prompt is requested before
   the AdMob SDK starts, together with the UMP (GDPR) consent form.
 - App Store Connect → App Privacy must declare data collected by AdMob
-  (identifiers, usage data) or the submission is rejected.
+  (identifiers, usage data) or the submission is rejected. The published label is:
+  Device ID + Product Interaction + Coarse Location → Third-Party Advertising
+  (used for tracking); Crash + Performance Data → App Functionality (not tracking).
+- **Age Rating → set the "Advertising" content descriptor to YES.** The app shows
+  AdMob ads, and Apple's automated pre-review flags a mismatch (Guideline 2.3.6,
+  Accurate Metadata) and REJECTS if it is left "No". This bit the 1.0 submission —
+  the first pass set every descriptor to None; only "Advertising" must be Yes.
 - A visible **Restore Purchases** control is required for non-consumables; it is
-  in the main menu.
+  on the Home screen.
+- The app is **universal** (`TARGETED_DEVICE_FAMILY = "1,2"`), so the store
+  listing needs iPad screenshots too — the required slot is **iPad Pro 12.9"
+  (`APP_IPAD_PRO_3GEN_129`, 2048×2732)**, not the older `APP_IPAD_PRO_129`.
+  Missing them makes the version "not in valid state" for review.
 
 ## 7. Difficulty regeneration
 
