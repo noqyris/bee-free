@@ -6,7 +6,7 @@ import { themeForChapter } from '../config/theme'
 import { t } from '../i18n'
 import { adService } from '../systems/AdService'
 import { reviewService } from '../systems/ReviewService'
-import { makeButton, FONT_STACK } from '../utils/ui'
+import { makeButton, drawHoneyDrop, FONT_STACK } from '../utils/ui'
 import { feedback } from '../systems/feedback'
 
 interface LevelCompleteData {
@@ -105,7 +105,7 @@ export class LevelCompleteScene extends Phaser.Scene {
 
     // Honey reward line
     const honey = this.add.container(0, 48)
-    honey.add(this.add.star(-38, 0, 5, 10, 20, colors.honey).setOrigin(0.5))
+    honey.add(drawHoneyDrop(this, -38, 0, 15))
     honey.add(
       this.add
         .text(-14, 0, t('result.honey', { n: this.params.honey }), {

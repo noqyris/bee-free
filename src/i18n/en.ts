@@ -11,6 +11,8 @@ export const en = {
   'menu.locked': 'Locked',
   'menu.stars': '{n}',
   'menu.progress': '{done} / {total} levels',
+  'settings.sound': 'Sound',
+  'settings.vibe': 'Buzz',
   'home.howTitle': 'How to play',
   'home.how': 'Tap a bee to fly it out. It smears honey on every cell it crosses — fly into fresh honey and you stick. Honey dries, so the ORDER is the puzzle.',
   'hud.level': 'Level {n}',

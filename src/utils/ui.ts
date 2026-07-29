@@ -5,6 +5,34 @@ import { feedback } from '../systems/feedback'
 
 export const FONT_STACK = '"Arial Rounded MT Bold", "Arial Black", "Helvetica Neue", Arial, sans-serif'
 
+/**
+ * A honey droplet glyph — the currency icon. Deliberately NOT a star: honey and
+ * the level-rating stars used to share the same gold star, so a glance could not
+ * tell "how much honey" from "how many stars". A teardrop in the in-game honey
+ * ambers reads unmistakably as the currency.
+ */
+export function drawHoneyDrop(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  r: number,
+): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics()
+  // Outer (dark amber) teardrop: round bottom + pointed top, base width = 2r so
+  // the triangle meets the circle flush at its widest point (no side bumps).
+  g.fillStyle(0xc47a00, 1)
+  g.fillCircle(x, y + r * 0.32, r)
+  g.fillTriangle(x, y - r * 1.5, x - r, y + r * 0.32, x + r, y + r * 0.32)
+  // Inner (bright amber) fill, slightly inset.
+  g.fillStyle(0xf3a712, 1)
+  g.fillCircle(x, y + r * 0.32, r * 0.82)
+  g.fillTriangle(x, y - r * 1.12, x - r * 0.82, y + r * 0.32, x + r * 0.82, y + r * 0.32)
+  // Gloss highlight.
+  g.fillStyle(0xffe08a, 0.85)
+  g.fillCircle(x - r * 0.3, y - r * 0.04, r * 0.26)
+  return g
+}
+
 export interface ButtonOptions {
   width: number
   height: number

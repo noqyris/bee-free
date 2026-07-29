@@ -6,7 +6,7 @@ import { saveManager } from '../systems/SaveManager'
 import { adService } from '../systems/AdService'
 import { paintBackground, type Background } from '../utils/background'
 import { t, type StringKey } from '../i18n'
-import { makeIconButton, FONT_STACK } from '../utils/ui'
+import { makeIconButton, drawHoneyDrop, FONT_STACK } from '../utils/ui'
 import { feedback } from '../systems/feedback'
 
 /**
@@ -58,14 +58,16 @@ export class MenuScene extends Phaser.Scene {
    * at this width.
    */
   private buildHeader(): void {
-    makeIconButton(this, 62, 72, '‹', () => this.scene.start('Home'), 32).setDepth(60)
-    this.statPill(122, 44, 176, `${saveManager.totalStars()}/${LEVEL_COUNT * 3}`, colors.starGold, colors.hudTextCss, 26)
-    this.statPill(GAME_WIDTH - 214, 44, 176, String(saveManager.honey), colors.honey, colors.honeyCss, 30)
+    // Top row shares Home's y=56 inset (top edge clears the y=44 safe line), with
+    // a clear gap between the back button and the stars pill.
+    makeIconButton(this, 58, 86, '‹', () => this.scene.start('Home'), 30).setDepth(60)
+    this.statPill(118, 56, 170, `${saveManager.totalStars()}/${LEVEL_COUNT * 3}`, 'star', colors.hudTextCss, 26)
+    this.statPill(GAME_WIDTH - 40 - 170, 56, 170, String(saveManager.honey), 'honey', colors.honeyCss, 28)
 
     this.add
-      .text(GAME_WIDTH / 2, 152, t('menu.levels'), {
+      .text(GAME_WIDTH / 2, 170, t('menu.levels'), {
         fontFamily: FONT_STACK,
-        fontSize: '52px',
+        fontSize: '48px',
         color: '#ffd23f',
         stroke: '#241708',
         strokeThickness: 8,
@@ -73,25 +75,29 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
   }
 
-  /** Rounded "glass" chip: translucent fill, hairline rim, star + value. */
+  /** Rounded "glass" chip: translucent fill, hairline rim, glyph + value. */
   private statPill(
     x: number,
     y: number,
     w: number,
     value: string,
-    starColor: number,
+    kind: 'star' | 'honey',
     textCss: string,
     fontSize: number,
   ): void {
-    const h = 56
+    const h = 60
     const g = this.add.graphics()
     g.fillStyle(0x000000, 0.32)
     g.fillRoundedRect(x, y, w, h, h / 2)
     g.lineStyle(2, 0xffffff, 0.1)
     g.strokeRoundedRect(x, y, w, h, h / 2)
-    this.add.star(x + 28, y + h / 2, 5, 8, 17, starColor).setOrigin(0.5)
+    if (kind === 'honey') {
+      drawHoneyDrop(this, x + 30, y + h / 2, 12)
+    } else {
+      this.add.star(x + 30, y + h / 2, 5, 8, 17, colors.starGold).setOrigin(0.5)
+    }
     this.add
-      .text(x + 52, y + h / 2, value, {
+      .text(x + 54, y + h / 2, value, {
         fontFamily: FONT_STACK,
         fontSize: `${fontSize}px`,
         color: textCss,
@@ -101,14 +107,14 @@ export class MenuScene extends Phaser.Scene {
 
   private buildChapterNav(): void {
     this.chapterTitle = this.add
-      .text(GAME_WIDTH / 2, 208, '', {
+      .text(GAME_WIDTH / 2, 236, '', {
         fontFamily: FONT_STACK,
         fontSize: '44px',
         color: colors.hudTextCss,
       })
       .setOrigin(0.5)
     this.chapterSub = this.add
-      .text(GAME_WIDTH / 2, 250, '', {
+      .text(GAME_WIDTH / 2, 280, '', {
         fontFamily: FONT_STACK,
         fontSize: '24px',
         color: colors.hudTextCss,
@@ -116,10 +122,10 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.6)
 
-    // Flanking the chapter name, not parked at the screen edges: at the edges
-    // they sat directly under the back arrow and read as a second back button.
-    makeIconButton(this, 176, 214, '‹', () => this.changeChapter(-1), 32)
-    makeIconButton(this, GAME_WIDTH - 176, 214, '›', () => this.changeChapter(1), 32)
+    // Flanking the chapter name and vertically centred on the whole two-line
+    // "Chapter N / <name>" block, clear of the "Levels" title above.
+    makeIconButton(this, 176, 258, '‹', () => this.changeChapter(-1), 28)
+    makeIconButton(this, GAME_WIDTH - 176, 258, '›', () => this.changeChapter(1), 28)
   }
 
   private buildDots(): void {
@@ -211,7 +217,7 @@ export class MenuScene extends Phaser.Scene {
       .text(0, stars > 0 || !unlocked ? -8 : 0, String(levelId), {
         fontFamily: FONT_STACK,
         fontSize: '30px',
-        color: unlocked ? '#241708' : '#6a6480',
+        color: unlocked ? '#241708' : '#b3a9d0',
       })
       .setOrigin(0.5)
     node.add(label)
@@ -230,7 +236,9 @@ export class MenuScene extends Phaser.Scene {
       for (let s = 0; s < 3; s++) {
         node.add(
           this.add
-            .star(-16 + s * 16, starY, 5, 4, 8.5, s < stars ? colors.starGold : colors.starEmpty)
+            // Unearned pips take the chapter's own stroke tone so they recede
+            // into the amber hex instead of reading as an off-palette cool blue.
+            .star(-16 + s * 16, starY, 5, 4, 8.5, s < stars ? colors.starGold : theme.cellStroke)
             .setOrigin(0.5),
         )
       }
