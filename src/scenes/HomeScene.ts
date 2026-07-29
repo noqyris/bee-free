@@ -8,6 +8,7 @@ import { adService } from '../systems/AdService'
 import { paintBackground } from '../utils/background'
 import { t } from '../i18n'
 import { makeButton, FONT_STACK } from '../utils/ui'
+import { feedback } from '../systems/feedback'
 
 const CHAPTER_SIZE = 25
 
@@ -50,10 +51,98 @@ export class HomeScene extends Phaser.Scene {
       primary: false,
     })
 
+    this.buildSettingsToggles()
     this.buildHowToCard(theme.accentCss)
     this.buildStoreRow()
 
     void adService.showBanner()
+  }
+
+  /**
+   * Sound + vibration toggles, side by side between the Levels button and the
+   * how-to card. Drawn glyphs (a speaker, a buzzing phone) rather than emoji,
+   * which render inconsistently across iOS font fallbacks. A struck-through,
+   * dimmed icon reads as "off".
+   */
+  private buildSettingsToggles(): void {
+    const y = 762
+    this.toggleChip(GAME_WIDTH / 2 - 70, y, 'sound', () => saveManager.get().settings.sfx, (v) =>
+      saveManager.updateSettings({ sfx: v }),
+    )
+    this.toggleChip(GAME_WIDTH / 2 + 70, y, 'vibe', () => saveManager.get().settings.haptics, (v) =>
+      saveManager.updateSettings({ haptics: v }),
+    )
+  }
+
+  private toggleChip(
+    x: number,
+    y: number,
+    kind: 'sound' | 'vibe',
+    get: () => boolean,
+    set: (v: boolean) => void,
+  ): void {
+    const r = 34
+    const chip = this.add.container(x, y)
+    const bg = this.add.graphics()
+    const icon = this.add.graphics()
+    chip.add([bg, icon])
+
+    const draw = (): void => {
+      const on = get()
+      bg.clear()
+      bg.fillStyle(0x000000, 0.32)
+      bg.fillCircle(0, 6, r)
+      bg.fillStyle(on ? colors.starGold : 0x473f5e, on ? 0.9 : 1)
+      bg.fillCircle(0, 0, r)
+      bg.lineStyle(2, 0xffffff, 0.12)
+      bg.strokeCircle(0, 0, r)
+
+      icon.clear()
+      const ink = on ? 0x241708 : 0x9a93b0
+      if (kind === 'sound') {
+        // Speaker cone + two sound-wave arcs.
+        icon.fillStyle(ink, 1)
+        icon.fillRect(-14, -6, 6, 12)
+        icon.fillTriangle(-8, -11, -8, 11, 4, 6)
+        icon.fillTriangle(-8, -11, 4, -6, 4, 6)
+        if (on) {
+          icon.lineStyle(3, ink, 1)
+          icon.beginPath(); icon.arc(6, 0, 7, -0.7, 0.7); icon.strokePath()
+          icon.beginPath(); icon.arc(6, 0, 13, -0.7, 0.7); icon.strokePath()
+        }
+      } else {
+        // Phone body + buzz lines on each side.
+        icon.fillStyle(ink, 1)
+        icon.fillRoundedRect(-8, -14, 16, 28, 4)
+        icon.fillStyle(on ? 0x473f5e : 0x2c2740, 1)
+        icon.fillRoundedRect(-5, -10, 10, 18, 2)
+        if (on) {
+          icon.lineStyle(3, ink, 1)
+          icon.beginPath(); icon.moveTo(-15, -6); icon.lineTo(-15, 6); icon.strokePath()
+          icon.beginPath(); icon.moveTo(15, -6); icon.lineTo(15, 6); icon.strokePath()
+        }
+      }
+      if (!on) {
+        icon.lineStyle(3, 0xd06060, 0.95)
+        icon.beginPath(); icon.moveTo(-16, -16); icon.lineTo(16, 16); icon.strokePath()
+      }
+    }
+    draw()
+
+    chip.setSize(r * 2, r * 2)
+    chip.setInteractive({ useHandCursor: true })
+    chip.on('pointerdown', () => this.tweens.add({ targets: chip, scale: 0.9, duration: 60 }))
+    chip.on('pointerout', () => this.tweens.add({ targets: chip, scale: 1, duration: 60 }))
+    chip.on('pointerup', () => {
+      this.tweens.add({ targets: chip, scale: 1, duration: 60 })
+      const next = !get()
+      set(next)
+      draw()
+      // Give immediate feedback in the sense the player just enabled — the tap
+      // sound/haptic fires through the newly-updated setting.
+      feedback.unlock()
+      feedback.tap()
+    })
   }
 
   /** Stars and honey, as glass chips in the top corners. */

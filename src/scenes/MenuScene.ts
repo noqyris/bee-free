@@ -7,6 +7,7 @@ import { adService } from '../systems/AdService'
 import { paintBackground, type Background } from '../utils/background'
 import { t, type StringKey } from '../i18n'
 import { makeIconButton, FONT_STACK } from '../utils/ui'
+import { feedback } from '../systems/feedback'
 
 /**
  * The level map, and nothing else. The store row and the Continue button moved
@@ -239,7 +240,11 @@ export class MenuScene extends Phaser.Scene {
       // Square hit area from the node size (reliable container-input path).
       node.setSize(radius * 1.9, radius * 1.9)
       node.setInteractive({ useHandCursor: true })
-      node.on('pointerdown', () => this.tweens.add({ targets: node, scale: 0.9, duration: 60 }))
+      node.on('pointerdown', () => {
+        feedback.unlock()
+        feedback.tap()
+        this.tweens.add({ targets: node, scale: 0.9, duration: 60 })
+      })
       node.on('pointerout', () => this.tweens.add({ targets: node, scale: 1, duration: 60 }))
       node.on('pointerup', () => {
         this.tweens.add({ targets: node, scale: 1, duration: 60 })

@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { colors } from '../config/gameConfig'
 import { juice } from '../config/juiceConfig'
+import { feedback } from '../systems/feedback'
 
 export const FONT_STACK = '"Arial Rounded MT Bold", "Arial Black", "Helvetica Neue", Arial, sans-serif'
 
@@ -60,6 +61,8 @@ export function makeButton(
   let pressed = false
   const press = () => {
     pressed = true
+    feedback.unlock()
+    feedback.tap()
     scene.tweens.add({
       targets: container,
       scaleX: juice.ui.buttonPressScale,
@@ -119,9 +122,11 @@ export function makeIconButton(
   // (custom Geom hit areas on containers don't register taps consistently).
   container.setSize(radius * 2, radius * 2)
   container.setInteractive({ useHandCursor: true })
-  container.on('pointerdown', () =>
-    scene.tweens.add({ targets: container, scale: 0.9, duration: 60 }),
-  )
+  container.on('pointerdown', () => {
+    feedback.unlock()
+    feedback.tap()
+    scene.tweens.add({ targets: container, scale: 0.9, duration: 60 })
+  })
   container.on('pointerup', () => {
     scene.tweens.add({ targets: container, scale: 1, duration: 60 })
     onTap()
@@ -166,9 +171,11 @@ export function makeRestartButton(
   const container = scene.add.container(x, y, [g, icon])
   container.setSize(radius * 2, radius * 2)
   container.setInteractive({ useHandCursor: true })
-  container.on('pointerdown', () =>
-    scene.tweens.add({ targets: container, scale: 0.9, duration: 60 }),
-  )
+  container.on('pointerdown', () => {
+    feedback.unlock()
+    feedback.tap()
+    scene.tweens.add({ targets: container, scale: 0.9, duration: 60 })
+  })
   container.on('pointerup', () => {
     scene.tweens.add({ targets: container, scale: 1, duration: 60 })
     // Spin the icon so the restart reads as an action, not just a tap.

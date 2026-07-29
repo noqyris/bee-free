@@ -7,6 +7,7 @@ import { t } from '../i18n'
 import { adService } from '../systems/AdService'
 import { reviewService } from '../systems/ReviewService'
 import { makeButton, FONT_STACK } from '../utils/ui'
+import { feedback } from '../systems/feedback'
 
 interface LevelCompleteData {
   levelIndex: number
@@ -83,8 +84,10 @@ export class LevelCompleteScene extends Phaser.Scene {
           alpha: 1,
           duration: juice.ui.starSlamMs,
           ease: 'Cubic.easeIn',
-          onComplete: () =>
-            this.cameras.main.shake(juice.ui.starLandShakeMs, juice.ui.starLandShakeIntensity),
+          onComplete: () => {
+            feedback.star(i)
+            this.cameras.main.shake(juice.ui.starLandShakeMs, juice.ui.starLandShakeIntensity)
+          },
         })
       })
     }

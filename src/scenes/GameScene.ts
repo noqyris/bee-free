@@ -19,6 +19,7 @@ import { saveManager } from '../systems/SaveManager'
 import { t } from '../i18n'
 import { makeIconButton, makeRestartButton, FONT_STACK } from '../utils/ui'
 import { adService } from '../systems/AdService'
+import { feedback } from '../systems/feedback'
 
 interface GameSceneData {
   levelIndex?: number
@@ -414,6 +415,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Press a tappable occupant → show where it will fly (green safe / red bad). */
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
+    feedback.unlock() // first user gesture resumes the audio context (iOS)
     if (this.inputLocked || this.board.status !== 'playing') return
     const cell = this.cellAt(pointer)
     const occ = this.board.occupantAt(cell.q, cell.r)
@@ -448,12 +450,15 @@ export class GameScene extends Phaser.Scene {
       const now = this.time.now
       this.comboCount = now - this.lastEscapeAt <= juice.escape.comboWindowMs ? this.comboCount + 1 : 1
       this.lastEscapeAt = now
+      feedback.escape(this.comboCount)
       this.animateEscape(occ, sprite, outcome)
     } else if (outcome.kind === 'stuck') {
       this.comboCount = 0
+      feedback.stuck()
       this.animateStuck(occ, sprite, outcome)
     } else {
       this.comboCount = 0
+      feedback.bump()
       this.animateBump(occ, sprite, outcome)
     }
   }
@@ -789,6 +794,7 @@ export class GameScene extends Phaser.Scene {
       difficultyDirector.recordWin(this.level.id)
       const honey = saveManager.recordWin(this.level.id, stars, LEVEL_COUNT)
       this.inputLocked = true
+      feedback.win()
       this.time.delayedCall(juice.ui.resultDelayWinMs, () => {
         this.scene.launch('LevelComplete', {
           levelIndex: this.levelIndex,
@@ -803,6 +809,7 @@ export class GameScene extends Phaser.Scene {
     } else if (status === 'lost') {
       difficultyDirector.recordFail(this.level.id)
       this.inputLocked = true
+      feedback.fail()
       this.time.delayedCall(juice.ui.resultDelayLoseMs, () => {
         this.scene.launch('LevelFailed', {
           levelIndex: this.levelIndex,
