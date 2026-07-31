@@ -21,7 +21,8 @@ public class StoreKitBridgePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "getProducts", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "purchase", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "restore", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getOwned", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getOwned", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getEnvironment", returnType: CAPPluginReturnPromise)
     ]
 
     private var updatesTask: Task<Void, Never>?
@@ -116,6 +117,15 @@ public class StoreKitBridgePlugin: CAPPlugin, CAPBridgedPlugin {
         Task {
             call.resolve(["ownedProductIds": await Self.ownedProductIds()])
         }
+    }
+
+    /// Whether this build runs in the sandbox (TestFlight / Xcode) vs the App
+    /// Store. TestFlight ships a receipt file named "sandboxReceipt"; the App
+    /// Store ships "receipt". Ads use this to serve Google TEST ads on TestFlight
+    /// and LIVE ads in production, from the same binary.
+    @objc func getEnvironment(_ call: CAPPluginCall) {
+        let isSandbox = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+        call.resolve(["sandbox": isSandbox])
     }
 
     /// Non-consumables this Apple ID currently owns, excluding revoked/refunded ones.

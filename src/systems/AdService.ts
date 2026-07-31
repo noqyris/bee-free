@@ -5,7 +5,8 @@ import {
   BannerAdPosition,
   BannerAdSize,
 } from '@capacitor-community/admob'
-import { AD_UNITS, ADS, USE_TEST_ADS } from '../config/monetization'
+import { ADS, USE_TEST_ADS, TEST_IOS, LIVE_IOS } from '../config/monetization'
+import { isSandboxBuild } from './appEnv'
 import { saveManager } from './SaveManager'
 
 /**
@@ -20,6 +21,11 @@ import { saveManager } from './SaveManager'
  * then one interstitial every N results with a hard cooldown.
  */
 class AdService {
+  // Chosen at init by environment: TEST ads on TestFlight/sandbox, LIVE on the
+  // App Store. Defaults to LIVE so a real store build is never at risk of test
+  // ads if the env check hasn't resolved yet.
+  private adUnits: typeof LIVE_IOS | typeof TEST_IOS = LIVE_IOS
+  private testing = USE_TEST_ADS
   private initPromise?: Promise<void>
   private interstitialReady = false
   private rewardedReady = false
@@ -48,6 +54,9 @@ class AdService {
   }
 
   private async runInit(): Promise<void> {
+    // TestFlight/sandbox → Google TEST ads; App Store → LIVE ads. One binary.
+    this.testing = USE_TEST_ADS || (await isSandboxBuild())
+    this.adUnits = this.testing ? TEST_IOS : LIVE_IOS
     try {
       const consent = await AdMob.requestConsentInfo()
       if (consent.isConsentFormAvailable && consent.status === AdmobConsentStatus.REQUIRED) {
@@ -68,7 +77,7 @@ class AdService {
     }
 
     try {
-      await AdMob.initialize({ initializeForTesting: USE_TEST_ADS })
+      await AdMob.initialize({ initializeForTesting: this.testing })
       void this.preloadInterstitial()
       void this.preloadRewarded()
     } catch {
@@ -77,9 +86,9 @@ class AdService {
   }
 
   private async preloadInterstitial(): Promise<void> {
-    if (!this.enabled || this.interstitialReady || !AD_UNITS.interstitial) return
+    if (!this.enabled || this.interstitialReady || !this.adUnits.interstitial) return
     try {
-      await AdMob.prepareInterstitial({ adId: AD_UNITS.interstitial })
+      await AdMob.prepareInterstitial({ adId: this.adUnits.interstitial })
       this.interstitialReady = true
     } catch {
       this.interstitialReady = false
@@ -87,9 +96,9 @@ class AdService {
   }
 
   private async preloadRewarded(): Promise<void> {
-    if (!this.enabled || this.rewardedReady || !AD_UNITS.rewarded) return
+    if (!this.enabled || this.rewardedReady || !this.adUnits.rewarded) return
     try {
-      await AdMob.prepareRewardVideoAd({ adId: AD_UNITS.rewarded })
+      await AdMob.prepareRewardVideoAd({ adId: this.adUnits.rewarded })
       this.rewardedReady = true
     } catch {
       this.rewardedReady = false
@@ -132,18 +141,18 @@ class AdService {
    * for why the menu is excluded).
    */
   async showBanner(): Promise<void> {
-    if (!this.enabled || !ADS.bannerDuringPlay || !AD_UNITS.banner) return
+    if (!this.enabled || !ADS.bannerDuringPlay || !this.adUnits.banner) return
     if (this.bannerShown) return
     await this.init() // idempotent; resolves once consent + ATT + SDK are done
     if (!this.enabled) return // a purchase may have landed while we waited
     this.bannerShown = true // set first: guards against a double show while awaiting
     try {
       await AdMob.showBanner({
-        adId: AD_UNITS.banner,
+        adId: this.adUnits.banner,
         adSize: BannerAdSize.ADAPTIVE_BANNER,
         position: BannerAdPosition.BOTTOM_CENTER,
         margin: 0,
-        isTesting: USE_TEST_ADS,
+        isTesting: this.testing,
       })
     } catch {
       this.bannerShown = false // never let a failed banner wedge the flag

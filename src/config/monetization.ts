@@ -13,7 +13,7 @@
  * need no AdMob account — so the whole flow is testable today.
  * https://developers.google.com/admob/ios/test-ads
  */
-const TEST_IOS = {
+export const TEST_IOS = {
   appId: 'ca-app-pub-3940256099942544~1458002511',
   interstitial: 'ca-app-pub-3940256099942544/4411468910',
   rewarded: 'ca-app-pub-3940256099942544/1712485313',
@@ -26,16 +26,22 @@ const TEST_IOS = {
  * stay true until the App Store release (see the file header). The game uses
  * only interstitial + rewarded; there is no banner placement.
  */
-const LIVE_IOS = {
+export const LIVE_IOS = {
   appId: 'ca-app-pub-3307486877162157~1512685345',
   interstitial: 'ca-app-pub-3307486877162157/6027359430',
   rewarded: 'ca-app-pub-3307486877162157/5436598428',
   banner: 'ca-app-pub-3307486877162157/6918904741',
 } as const
 
-/** ⚠️ Must be false for the App Store build. */
+/**
+ * Force Google TEST ads regardless of environment. Normally `false` — the app
+ * decides at runtime: TestFlight/sandbox builds get TEST ads, App Store builds
+ * get LIVE ads (see AdService + StoreKitBridge.getEnvironment). Set `true` only
+ * to force test ads everywhere while developing.
+ */
 export const USE_TEST_ADS = false
 
+/** Static fallback; AdService picks TEST_IOS vs LIVE_IOS at runtime by env. */
 export const AD_UNITS = USE_TEST_ADS ? TEST_IOS : LIVE_IOS
 
 /**
