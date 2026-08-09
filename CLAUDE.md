@@ -198,15 +198,19 @@ fail-screen +3-moves revive, win-screen bonus ad, and a pile of game-feel work
 The release flags (`DEV_UNLOCK_ALL_LEVELS`, `USE_TEST_ADS`) are at their
 **release values**.
 
-**Blocked on the user** before the next ship:
-1. Create the **7 consumable IAP products** in App Store Connect (ids already in
-   code + `ios/App/BeeFree.storekit`).
-2. Refresh the **store copy** (name/keywords are fine; description +
-   [store/metadata.md](store/metadata.md) still describe the old 150-level drying-
-   trail design).
+**Blocked on the user** before the next ship (Aug 9 2026 — 1 and 2 are now done):
+1. ~~Create the 7 consumable IAP products~~ **done**: created over the ASC API
+   (`inAppPurchases` **v2** — it *can* create products, contrary to the old note),
+   all **READY_TO_SUBMIT** with price, localization, 175 territories and a review
+   screenshot from `scripts/iapReviewShot.mts`. They must still be **attached to a
+   submission** — a new IAP is only reviewed alongside a build.
+2. ~~Refresh the store copy~~ **done**: [store/metadata.md](store/metadata.md) is
+   rewritten for the shipping design, with a 1.1 What's New. Still needs
+   **pushing to ASC** by hand.
 3. Test the StoreKit `transactionUpdated` delivery path on a device (sandbox
-   Ask-to-Buy) before the consumables go live.
-4. Then: bump build number, `npm run build`, `cap sync`, archive + upload.
+   Ask-to-Buy) before the consumables go live — needs real hardware.
+4. Submit for review when ready. Everything up to the TestFlight upload is
+   automated; the submission itself is deliberately left to the user.
 
 Do not commit / build / ship unless the user explicitly asks. Full state,
 history, and design rationale in [docs/STATUS.md](docs/STATUS.md).

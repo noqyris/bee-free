@@ -42,6 +42,20 @@ const COMPASS_LEVELS: ReadonlyArray<LevelData> = (generated.levels as RawCompass
 export { COMPASS_LEVELS }
 export const COMPASS_COUNT = COMPASS_LEVELS.length
 
+/**
+ * Is the shipped ladder the real generated one, or the checked-in placeholder?
+ *
+ * `genCompassLevels.ts` takes hours (the rotation-aware search runs ~1.5s per
+ * candidate and each slot may try 1200), so the repo carries a one-board
+ * placeholder until a full run lands. A build made against that placeholder must
+ * not offer the mode — a player who reaches campaign L40 would unlock a "1/1"
+ * ladder that ends after a single 7-cell board, which reads worse than no mode
+ * at all. Gating on the DATA rather than on a hand-flipped flag means the mode
+ * turns itself on the moment real levels are committed, with no code change and
+ * nothing to remember.
+ */
+export const COMPASS_READY = !(generated as { placeholder?: boolean }).placeholder
+
 /** 0-based index → compass level; clamped. */
 export function getCompassLevel(index: number): LevelData {
   const i = Math.max(0, Math.min(COMPASS_LEVELS.length - 1, index))

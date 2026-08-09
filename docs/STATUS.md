@@ -23,8 +23,14 @@ stale. Read this before assuming anything from `README.md` or `store/metadata.md
 > - **Compass Hive shipped a 1-level placeholder.** The mode was fully wired and
 >   unlocked after campaign L40, but `compass.generated.json` held a single
 >   `"placeholder": true` board — `genCompassLevels.ts` had never been run to
->   completion. Generated for real; `npm run gen:compass` now exists so it is a
->   command and not oral tradition.
+>   completion. `npm run gen:compass` now exists so it is a command and not oral
+>   tradition. **The mode is gated on the data**: `COMPASS_READY` in
+>   [compass.ts](../src/levels/compass.ts) reads the placeholder flag and
+>   HomeScene omits the entry entirely while it is set — so no build can ever
+>   offer a one-level mode, and the entry turns itself on the moment a real
+>   ladder is committed. Generation is genuinely expensive (measured: ~1.55 s per
+>   candidate, up to 1200 candidates per slot → **up to ~31 min for a single
+>   late level**); build 25 shipped with the mode hidden while the run continued.
 > - **The planner floor had drifted ahead of the data.** A "round 5" rewrite of
 >   `plannerFloor` (start L26 → L12, plateau 0.35 → 0.45) was never followed by
 >   `gen:levels`, leaving **45 shipped levels below their own stated floor**. The
