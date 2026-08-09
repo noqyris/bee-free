@@ -16,6 +16,111 @@
       "productID" : "com.beefree.hiveescape.removeads",
       "referenceName" : "Remove Ads",
       "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "BEEFREE0002",
+      "localizations" : [
+        {
+          "description" : "400 honey plus 5 of every power-up — the best way to start.",
+          "displayName" : "Starter Pack",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.beefree.hiveescape.starter",
+      "referenceName" : "Starter Pack",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "BEEFREE0003",
+      "localizations" : [
+        {
+          "description" : "500 honey to spend on power-ups.",
+          "displayName" : "Pouch of Honey",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.beefree.hiveescape.honey.s",
+      "referenceName" : "Pouch of Honey",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "BEEFREE0004",
+      "localizations" : [
+        {
+          "description" : "1800 honey to spend on power-ups.",
+          "displayName" : "Jar of Honey",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.beefree.hiveescape.honey.m",
+      "referenceName" : "Jar of Honey",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "BEEFREE0005",
+      "localizations" : [
+        {
+          "description" : "3500 honey to spend on power-ups.",
+          "displayName" : "Barrel of Honey",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.beefree.hiveescape.honey.l",
+      "referenceName" : "Barrel of Honey",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "BEEFREE0006",
+      "localizations" : [
+        {
+          "description" : "10 Honey Cleaner power-ups.",
+          "displayName" : "10x Honey Cleaner",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.beefree.hiveescape.pack.clean",
+      "referenceName" : "10x Honey Cleaner",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "BEEFREE0007",
+      "localizations" : [
+        {
+          "description" : "10 Undo power-ups.",
+          "displayName" : "10x Undo",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.beefree.hiveescape.pack.undo",
+      "referenceName" : "10x Undo",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "BEEFREE0008",
+      "localizations" : [
+        {
+          "description" : "10 plus-3-moves power-ups.",
+          "displayName" : "10x +3 Moves",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.beefree.hiveescape.pack.moves",
+      "referenceName" : "10x +3 Moves",
+      "type" : "Consumable"
     }
   ],
   "settings" : {

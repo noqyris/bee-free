@@ -1,0 +1,1 @@
+{"schema":1,"count":1,"placeholder":true,"levels":[{"id":1,"cells":[[0,0],[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]],"honeyCells":[],"bees":[{"q":0,"r":0,"dir":0,"kind":"bee","color":0},{"q":1,"r":0,"dir":3,"kind":"bee","color":1}],"moveBudget":6,"threeStarSpare":1,"gates":[[1,0,0,0],[-1,0,3,1]],"minMoves":4,"plannerLoss":0.5,"shape":"placeholder"}]}

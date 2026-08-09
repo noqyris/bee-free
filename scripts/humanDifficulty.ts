@@ -60,7 +60,6 @@ function lossRate(level: LevelData): number {
 const rows = LEVELS.map((l) => ({
   id: l.id,
   chapter: l.chapter ?? Math.ceil(l.id / 25),
-  dry: l.dryMoves ?? 0,
   queen: l.bees.some((b) => b.kind === 'queen'),
   goals: l.bees.filter((b) => b.kind !== 'hornet').length,
   slack: l.moveBudget - l.bees.filter((b) => b.kind !== 'hornet').length,
@@ -70,33 +69,26 @@ const rows = LEVELS.map((l) => ({
 const pct = (x: number) => `${Math.round(x * 100)}%`
 
 console.log('\nSMART-GREEDY LOSS = does a competent player have to plan ahead?')
-console.log('ch | goals | dry moves | queen lvls | smart-greedy loss | free levels (0%)')
-console.log('---|-------|-----------|------------|-------------------|------------------')
-for (let ch = 1; ch <= 6; ch++) {
+console.log('ch | goals | queen lvls | smart-greedy loss | free levels (0%)')
+console.log('---|-------|------------|-------------------|------------------')
+const chapterCount = Math.max(...rows.map((r) => r.chapter))
+for (let ch = 1; ch <= chapterCount; ch++) {
   const g = rows.filter((r) => r.chapter === ch)
   const avg = g.reduce((a, r) => a + r.loss, 0) / g.length
   const span = (a: number[]) => `${Math.min(...a)}–${Math.max(...a)}`
   console.log(
-    ` ${ch} | ${span(g.map((r) => r.goals)).padEnd(6)}|    ${span(g.map((r) => r.dry)).padEnd(7)}|    ${String(g.filter((r) => r.queen).length).padStart(2)}/${g.length}    |        ${pct(avg).padStart(4)}       |      ${g.filter((r) => r.loss === 0).length}/${g.length}`,
+    ` ${String(ch).padStart(2)} | ${span(g.map((r) => r.goals)).padEnd(6)}|    ${String(g.filter((r) => r.queen).length).padStart(2)}/${g.length}    |        ${pct(avg).padStart(4)}       |      ${g.filter((r) => r.loss === 0).length}/${g.length}`,
   )
 }
 
-console.log('\n15-level windows (should trend UP):')
-for (let w = 0; w < 150; w += 15) {
+console.log('\n15-level windows (should trend UP, then hold):')
+for (let w = 0; w < rows.length; w += 15) {
   const g = rows.slice(w, w + 15)
   const a = g.reduce((s, r) => s + r.loss, 0) / g.length
-  console.log(`  L${String(w + 1).padStart(3)}-${String(w + 15).padStart(3)}  ${pct(a).padStart(4)}  ${'#'.repeat(Math.round(a * 40))}`)
+  console.log(`  L${String(w + 1).padStart(3)}-${String(w + g.length).padStart(3)}  ${pct(a).padStart(4)}  ${'#'.repeat(Math.round(a * 40))}`)
 }
 
 const free = rows.filter((r) => r.loss === 0)
-console.log(`\nFREE levels (competent play never loses): ${free.length}/150`)
+console.log(`\nFREE levels (competent play never loses): ${free.length}/${rows.length}`)
 console.log(`Overall smart-greedy loss: ${pct(rows.reduce((s, r) => s + r.loss, 0) / rows.length)}`)
-
-// Does longer-lasting honey actually buy difficulty? (It should, monotonically.)
-const m = (a: typeof rows) => (a.length ? pct(a.reduce((s, r) => s + r.loss, 0) / a.length) : '-')
-console.log('\nBy how long the trail stays sticky:')
-for (const d of [...new Set(rows.map((r) => r.dry))].sort((a, b) => a - b)) {
-  const g = rows.filter((r) => r.dry === d)
-  console.log(`  dries after ${d} move(s) (${String(g.length).padStart(3)} levels): ${m(g)}`)
-}
 console.log('')

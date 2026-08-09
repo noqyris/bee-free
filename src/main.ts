@@ -7,6 +7,7 @@ import { MenuScene } from './scenes/MenuScene'
 import { GameScene } from './scenes/GameScene'
 import { LevelCompleteScene } from './scenes/LevelCompleteScene'
 import { LevelFailedScene } from './scenes/LevelFailedScene'
+import { ShopScene } from './scenes/ShopScene'
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -26,6 +27,7 @@ const game = new Phaser.Game({
     GameScene,
     LevelCompleteScene,
     LevelFailedScene,
+    ShopScene,
   ],
 })
 

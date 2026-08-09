@@ -10,6 +10,7 @@ export class Bee implements CellOccupant {
     public q: number,
     public r: number,
     public dir: Direction,
+    readonly color?: number,
   ) {}
 
   isTappable(): boolean {
@@ -22,7 +23,7 @@ export class Bee implements CellOccupant {
     return true
   }
   clone(): Bee {
-    return new Bee(this.id, this.q, this.r, this.dir)
+    return new Bee(this.id, this.q, this.r, this.dir, this.color)
   }
 }
 
@@ -38,6 +39,7 @@ export class Queen implements CellOccupant {
     public q: number,
     public r: number,
     public dir: Direction,
+    readonly color?: number,
   ) {}
 
   isTappable(): boolean {
@@ -50,7 +52,7 @@ export class Queen implements CellOccupant {
     return true
   }
   clone(): Queen {
-    return new Queen(this.id, this.q, this.r, this.dir)
+    return new Queen(this.id, this.q, this.r, this.dir, this.color)
   }
 }
 
@@ -86,9 +88,9 @@ export class Hornet implements CellOccupant {
 export function createOccupant(id: number, spec: BeeSpec): CellOccupant {
   switch (spec.kind) {
     case 'bee':
-      return new Bee(id, spec.q, spec.r, spec.dir)
+      return new Bee(id, spec.q, spec.r, spec.dir, spec.color)
     case 'queen':
-      return new Queen(id, spec.q, spec.r, spec.dir)
+      return new Queen(id, spec.q, spec.r, spec.dir, spec.color)
     case 'hornet':
       return new Hornet(id, spec.q, spec.r)
   }

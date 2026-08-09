@@ -54,7 +54,9 @@ export const layout = {
   // canvas letterboxes and the bar sits in the black band, but on a 4:3 iPad the
   // canvas fills the height and the bar eats into it. 1110 of 1280 leaves ~13%
   // clear, which covers a 50pt banner plus the home indicator on every device.
-  boardBottom: 1110,
+  boardBottom: 1002,
+  /** Row of power-up buttons sits between the board and the banner-safe line. */
+  powerupBarY: 1066,
   /** Canvas y below which no scene may put anything, for the same reason. */
   bannerSafeBottom: 1130,
   boardPaddingX: 40,

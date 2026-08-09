@@ -25,10 +25,39 @@ class HapticsManager {
     void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {})
   }
 
-  /** Bee bounces off a wall — a soft knock. */
+  /**
+   * Bee bounces off a wall — HEAVY, unlike the light escape tick: the wall is
+   * stone and the move is gone, and with sound off this is the one channel that
+   * carries the difference between success and a wasted move.
+   */
   bump(): void {
     if (!this.on) return
+    void Haptics.impact({ style: ImpactStyle.Heavy }).catch(() => {})
+  }
+
+  /** Pressing a bee to aim — a barely-there selection tick. */
+  press(): void {
+    if (!this.on) return
+    void Haptics.selectionStart().catch(() => {})
+    void Haptics.selectionEnd().catch(() => {})
+  }
+
+  /** Tapping something immovable (hornet wall) — a dull light knock. */
+  deny(): void {
+    if (!this.on) return
     void Haptics.impact({ style: ImpactStyle.Light }).catch(() => {})
+  }
+
+  /** The queen escaped early — instant unrecoverable loss, the error pattern. */
+  queenFail(): void {
+    if (!this.on) return
+    void Haptics.notification({ type: NotificationType.Error }).catch(() => {})
+  }
+
+  /** The board is mathematically lost (fewer moves than bees) — one warning. */
+  warning(): void {
+    if (!this.on) return
+    void Haptics.notification({ type: NotificationType.Warning }).catch(() => {})
   }
 
   /** Level cleared — the success notification pattern. */

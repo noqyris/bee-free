@@ -61,7 +61,7 @@ describe('BoardState', () => {
     expect(board.occupantAt(-1, 0)).toBeDefined()
   })
 
-  it('unblocks a chain once the front bee leaves', () => {
+  it("the front bee's vacated cell is permanent honey, so the next bee sticks then re-flies", () => {
     const board = new BoardState(
       makeLevel({
         bees: [
@@ -70,8 +70,9 @@ describe('BoardState', () => {
         ],
       }),
     )
-    expect(board.tap(1, 0)?.kind).toBe('escaped')
-    expect(board.tap(-1, 0)?.kind).toBe('escaped')
+    expect(board.tap(1, 0)?.kind).toBe('escaped') // front bee out; its start (1,0) is now honey
+    expect(board.tap(-1, 0)?.kind).toBe('stuck') // the next bee glues into that honey at (1,0)
+    expect(board.tap(1, 0)?.kind).toBe('escaped') // re-fly it off the honey, out the edge
     expect(board.status).toBe('won')
   })
 

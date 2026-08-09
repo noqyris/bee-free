@@ -20,9 +20,39 @@ export const feedback = {
     audioManager.stuck()
     hapticsManager.stuck()
   },
+  /** A bee landed in honey and collected it — a bright little reward blip. */
+  collect(): void {
+    audioManager.collect()
+    hapticsManager.tap()
+  },
   bump(): void {
     audioManager.bump()
     hapticsManager.bump()
+  },
+  /** Finger lands on a bee (aiming) — the softest tick in the game. */
+  press(): void {
+    audioManager.press()
+    hapticsManager.press()
+  },
+  /** Tapped something immovable (a hornet wall). */
+  deny(): void {
+    audioManager.deny()
+    hapticsManager.deny()
+  },
+  /** The queen left early — catastrophic, must never sound like a win. */
+  queenFail(): void {
+    audioManager.queenFail()
+    hapticsManager.queenFail()
+  },
+  /** Undo stepped the board back one move. */
+  undo(): void {
+    audioManager.undo()
+    hapticsManager.tap()
+  },
+  /** Moves left just dropped below the bees remaining — one alert, not a nag. */
+  warning(): void {
+    audioManager.warning()
+    hapticsManager.warning()
   },
   win(): void {
     audioManager.win()

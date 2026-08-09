@@ -123,6 +123,12 @@ class AudioManager {
     this.blip({ freq: f, freqTo: f * 1.5, durMs: 180, type: 'sine', gain: 0.28, attackMs: 4, cutoff: 3500, detune: 5 })
   }
 
+  /** Honey collected on landing — a bright rising two-note "ding". */
+  collect(): void {
+    this.blip({ freq: this.note(7, 659), durMs: 120, type: 'sine', gain: 0.2, attackMs: 3, cutoff: 5200, detune: 5 })
+    this.blip({ freq: this.note(12, 659), durMs: 170, type: 'sine', gain: 0.18, attackMs: 3, cutoff: 5200, detune: 5, delayMs: 70 })
+  }
+
   /** Bee glues into fresh honey — a sticky descending "gloop". */
   stuck(): void {
     this.blip({ freq: 320, freqTo: 150, durMs: 240, type: 'triangle', gain: 0.3, attackMs: 6, cutoff: 900, detune: 8 })
@@ -165,6 +171,34 @@ class AudioManager {
   /** Soft UI click for buttons and menu taps. */
   tap(): void {
     this.blip({ freq: 660, freqTo: 520, durMs: 60, type: 'sine', gain: 0.14, attackMs: 2, cutoff: 3000 })
+  }
+
+  /** Pressing a bee to aim — a barely-there upward tick, softer than tap(). */
+  press(): void {
+    this.blip({ freq: 520, freqTo: 580, durMs: 45, type: 'sine', gain: 0.08, attackMs: 2, cutoff: 2400 })
+  }
+
+  /** Tapping an immovable wall — a short dull thud: "that does not move". */
+  deny(): void {
+    this.blip({ freq: 110, freqTo: 90, durMs: 110, type: 'triangle', gain: 0.14, attackMs: 3, cutoff: 420 })
+  }
+
+  /** The queen escaped early — a stern descending minor two-note, not a chime. */
+  queenFail(): void {
+    this.blip({ freq: this.note(0, 392), durMs: 200, type: 'triangle', gain: 0.26, attackMs: 4, cutoff: 1400 })
+    this.blip({ freq: this.note(-6, 392), durMs: 380, type: 'triangle', gain: 0.24, attackMs: 6, cutoff: 1000, delayMs: 140 })
+  }
+
+  /** Undo — a quick reverse-whoosh: down-then-up, reads as "step back". */
+  undo(): void {
+    this.blip({ freq: 500, freqTo: 300, durMs: 90, type: 'sine', gain: 0.16, attackMs: 3, cutoff: 2000 })
+    this.blip({ freq: 300, freqTo: 460, durMs: 110, type: 'sine', gain: 0.14, attackMs: 4, cutoff: 2000, delayMs: 80 })
+  }
+
+  /** The moves counter dropped below what the bees need — a single alert. */
+  warning(): void {
+    this.blip({ freq: 740, freqTo: 700, durMs: 160, type: 'triangle', gain: 0.2, attackMs: 3, cutoff: 2600 })
+    this.blip({ freq: 740, freqTo: 700, durMs: 160, type: 'triangle', gain: 0.16, attackMs: 3, cutoff: 2600, delayMs: 190 })
   }
 }
 

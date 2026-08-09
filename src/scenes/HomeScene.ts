@@ -3,11 +3,12 @@ import { GAME_WIDTH, colors, layout } from '../config/gameConfig'
 import { LEVEL_COUNT } from '../levels'
 import { themeForChapter, type ChapterTheme } from '../config/theme'
 import { purchaseService } from '../systems/PurchaseService'
+import { COMPASS_COUNT } from '../levels/compass'
 import { saveManager } from '../systems/SaveManager'
 import { adService } from '../systems/AdService'
 import { paintBackground } from '../utils/background'
 import { t } from '../i18n'
-import { makeButton, drawHoneyDrop, FONT_STACK } from '../utils/ui'
+import { makeButton, drawHoneyDrop, transitionTo, fadeInScene, FONT_STACK } from '../utils/ui'
 import { feedback } from '../systems/feedback'
 
 const CHAPTER_SIZE = 25
@@ -25,39 +26,76 @@ const CHAPTER_SIZE = 25
  */
 export class HomeScene extends Phaser.Scene {
   private theme!: ChapterTheme
+  private honeyText?: Phaser.GameObjects.Text
+  /** In-flight StoreKit call — blocks double-taps opening two payment sheets. */
+  private storeBusy = false
 
   constructor() {
     super('Home')
   }
 
-  create(): void {
+  create(data?: { toastKey?: 'store.adsRemoved' | 'store.restored' }): void {
+    this.storeBusy = false
     const level = saveManager.currentLevel
     this.theme = themeForChapter(Math.ceil(level / CHAPTER_SIZE))
+    fadeInScene(this)
     paintBackground(this, this.theme)
 
     this.buildTopBar()
+    this.buildDailyGift()
     this.buildHero()
 
     const started = saveManager.levelsCompleted() > 0
     makeButton(
       this,
       GAME_WIDTH / 2,
-      596,
+      576,
       started ? t('menu.continue', { n: level }) : t('menu.playFirst'),
-      () => this.scene.start('Game', { levelIndex: level - 1 }),
+      () => transitionTo(this, 'Game', { levelIndex: level - 1 }),
       { width: 484, height: 108, fontSize: 34, accent: this.theme.accent },
     )
 
-    makeButton(this, GAME_WIDTH / 2, 710, t('menu.levels'), () => this.scene.start('Menu'), {
+    makeButton(this, GAME_WIDTH / 2, 672, t('menu.levels'), () => transitionTo(this, 'Menu'), {
       width: 484,
-      height: 92,
-      fontSize: 30,
+      height: 80,
+      fontSize: 28,
       primary: false,
     })
+
+    // Compass Hive — the rotation mode's own ladder, unlocked at campaign L40
+    // (the mechanics assume a player who already reads honey and the queen).
+    const compassUnlocked = saveManager.currentLevel > 40
+    // The unlock hint rides INSIDE the label. As a separate caption line it had
+    // nowhere to go: the button's bottom edge is at 792 and the settings pills
+    // start at 794, so the line landed on top of them.
+    const compassBtn = makeButton(
+      this,
+      GAME_WIDTH / 2,
+      756,
+      compassUnlocked
+        ? `${t('home.compass')}  ·  ${t('home.compassProgress', { n: saveManager.compassLevel, total: COMPASS_COUNT })}`
+        : `🔒 ${t('home.compass')}  ·  ${t('home.compassLocked')}`,
+      () => {
+        if (compassUnlocked)
+          transitionTo(this, 'Game', { levelIndex: saveManager.compassLevel - 1, mode: 'compass' })
+      },
+      {
+        width: 484,
+        height: 72,
+        fontSize: compassUnlocked ? 24 : 21,
+        primary: false,
+        accent: 0x7fd6ff,
+      },
+    )
+    if (!compassUnlocked) compassBtn.setAlpha(0.55)
 
     this.buildSettingsToggles()
     this.buildHowToCard()
     this.buildStoreRow()
+
+    // A purchase/restore success restarts this scene to redraw the store row;
+    // the confirmation toast rides through the restart via scene data.
+    if (data?.toastKey) this.showToast(t(data.toastKey))
 
     void adService.showBanner()
   }
@@ -72,25 +110,92 @@ export class HomeScene extends Phaser.Scene {
     this.statPill(GAME_WIDTH - 40 - w, 56, honey, 'honey', w)
   }
 
+  /**
+   * Daily gift chip between the two stat pills: a small, honest streak — honey
+   * that grows a little per consecutive day, no timers, no push, all local.
+   * Only rendered while today's gift is unclaimed.
+   */
+  private buildDailyGift(): void {
+    if (!saveManager.canClaimDaily()) return
+    const chip = this.add.container(GAME_WIDTH / 2, 86)
+    const g = this.add.graphics()
+    g.fillStyle(0x000000, 0.34)
+    g.fillRoundedRect(-84, -30, 168, 60, 30)
+    g.lineStyle(2, this.theme.accent, 0.9)
+    g.strokeRoundedRect(-84, -30, 168, 60, 30)
+    chip.add(g)
+    chip.add(drawHoneyDrop(this, -56, 0, 12))
+    chip.add(
+      this.add
+        .text(10, 0, t('daily.gift'), { fontFamily: FONT_STACK, fontSize: '21px', color: this.theme.accentCss })
+        .setOrigin(0.5),
+    )
+    // A gentle beckoning pulse — it is a gift, it may glimmer.
+    this.tweens.add({
+      targets: chip,
+      scale: 1.05,
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    })
+    const hit = this.add.rectangle(0, 0, 168, 60, 0, 0).setInteractive({ useHandCursor: true })
+    chip.add(hit)
+    hit.on('pointerdown', () => {
+      const reward = saveManager.claimDaily()
+      if (!reward) {
+        chip.destroy()
+        return
+      }
+      feedback.unlock()
+      feedback.escape(1)
+      this.honeyText?.setText(String(saveManager.honey))
+      this.showToast(t('daily.claimed', { n: reward.honey, streak: reward.streak }))
+      this.tweens.killTweensOf(chip)
+      this.tweens.add({
+        targets: chip,
+        scale: 0,
+        alpha: 0,
+        duration: 220,
+        ease: 'Back.easeIn',
+        onComplete: () => chip.destroy(),
+      })
+    })
+  }
+
   private statPill(x: number, y: number, value: string, kind: 'star' | 'honey', width = 176): void {
     const h = 60
     const g = this.add.graphics()
     g.fillStyle(0x000000, 0.34)
     g.fillRoundedRect(x, y, width, h, h / 2)
-    g.lineStyle(2, 0xffffff, 0.1)
+    g.lineStyle(2, kind === 'honey' ? this.theme.accent : 0xffffff, kind === 'honey' ? 0.6 : 0.1)
     g.strokeRoundedRect(x, y, width, h, h / 2)
     if (kind === 'honey') {
       drawHoneyDrop(this, x + 32, y + h / 2, 13)
     } else {
       this.add.star(x + 32, y + h / 2, 5, 8.5, 18, colors.starGold).setOrigin(0.5)
     }
-    this.add
+    const valueText = this.add
       .text(x + 60, y + h / 2, value, {
         fontFamily: FONT_STACK,
         fontSize: '28px',
         color: colors.hudTextCss,
       })
       .setOrigin(0, 0.5)
+    // The honey chip doubles as the Shop entry — tap to buy honey / power-ups.
+    if (kind === 'honey') {
+      this.honeyText = valueText
+      this.add
+        .text(x + width - 24, y + h / 2, '＋', { fontFamily: FONT_STACK, fontSize: '30px', color: this.theme.accentCss })
+        .setOrigin(0.5)
+      this.add
+        .rectangle(x + width / 2, y + h / 2, width, h, 0, 0)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          feedback.tap()
+          transitionTo(this, 'Shop', { returnTo: 'Home' })
+        })
+    }
   }
 
   // ── Hero ────────────────────────────────────────────────────────────────────
@@ -174,7 +279,7 @@ export class HomeScene extends Phaser.Scene {
    * muted pill with a struck-through, dimmed icon reads as "off".
    */
   private buildSettingsToggles(): void {
-    const y = 812
+    const y = 822
     this.togglePill(GAME_WIDTH / 2 - 98, y, 'sound', t('settings.sound'), () => saveManager.get().settings.sfx, (v) =>
       saveManager.updateSettings({ sfx: v }),
     )
@@ -345,10 +450,15 @@ export class HomeScene extends Phaser.Scene {
   }
 
   private async buyRemoveAds(): Promise<void> {
+    if (this.storeBusy) return
+    this.storeBusy = true
     const res = await purchaseService.buyRemoveAds()
+    if (!this.scene.isActive('Home')) return
+    this.storeBusy = false
     if (res.ok) {
-      this.showToast(t('store.adsRemoved'))
-      this.scene.restart() // redraw the row without the buy button
+      // Restart redraws the row without the buy button; the toast would die
+      // with this scene instance, so it travels through the restart data.
+      this.scene.restart({ toastKey: 'store.adsRemoved' })
       return
     }
     if (res.reason === 'cancelled') return // silent: the player chose to back out
@@ -362,10 +472,13 @@ export class HomeScene extends Phaser.Scene {
   }
 
   private async restorePurchases(): Promise<void> {
+    if (this.storeBusy) return
+    this.storeBusy = true
     const res = await purchaseService.restore()
+    if (!this.scene.isActive('Home')) return
+    this.storeBusy = false
     if (res.ok) {
-      this.showToast(t('store.restored'))
-      this.scene.restart()
+      this.scene.restart({ toastKey: 'store.restored' })
     } else {
       this.showToast(
         res.reason === 'unavailable' ? t('store.unavailable') : t('store.nothingToRestore'),

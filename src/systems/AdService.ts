@@ -33,18 +33,31 @@ class AdService {
   private resultsSinceInterstitial = 0
   private lastInterstitialAt = 0
 
-  /** Native-only, and only for players who have not bought "remove ads". */
+  /**
+   * Gate for the INTRUSIVE formats (banner + interstitial): native-only, and
+   * only for players who have not bought "remove ads".
+   */
   private get enabled(): boolean {
     return Capacitor.isNativePlatform() && !saveManager.get().removeAdsPurchased
   }
 
   /**
+   * Rewarded ads are OPT-IN value (revive, free power-ups, free honey), so
+   * "remove ads" deliberately does not switch them off — paying must never make
+   * the game strictly harder and poorer. Native-only, like everything else.
+   */
+  private get rewardedAllowed(): boolean {
+    return Capacitor.isNativePlatform()
+  }
+
+  /**
    * Gather consent (UMP), ask for tracking permission (ATT), then start the SDK.
    * That order matters: both must be resolved before the first ad request or
-   * Google serves nothing in the EEA.
+   * Google serves nothing in the EEA. Runs for payers too — they still get the
+   * opt-in rewarded placements.
    */
   init(): Promise<void> {
-    if (!this.enabled) return Promise.resolve()
+    if (!Capacitor.isNativePlatform()) return Promise.resolve()
     // Share ONE in-flight promise. The old version flipped a boolean on entry,
     // so a second caller returned immediately while the SDK was still resolving
     // consent/ATT — and anything that then requested an ad (the banner does, as
@@ -96,7 +109,7 @@ class AdService {
   }
 
   private async preloadRewarded(): Promise<void> {
-    if (!this.enabled || this.rewardedReady || !this.adUnits.rewarded) return
+    if (!this.rewardedAllowed || this.rewardedReady || !this.adUnits.rewarded) return
     try {
       await AdMob.prepareRewardVideoAd({ adId: this.adUnits.rewarded })
       this.rewardedReady = true
@@ -154,6 +167,17 @@ class AdService {
         margin: 0,
         isTesting: this.testing,
       })
+      // A "remove ads" purchase can land while the native show was in flight —
+      // its hideBanner() then raced this call and lost. Re-check and take the
+      // banner straight down so a payer never sits behind an ad bar.
+      if (!this.enabled) {
+        this.bannerShown = false
+        try {
+          await AdMob.removeBanner()
+        } catch {
+          // Nothing to remove — fine.
+        }
+      }
     } catch {
       this.bannerShown = false // never let a failed banner wedge the flag
     }
@@ -172,7 +196,7 @@ class AdService {
 
   /** True when a rewarded ad can be offered right now. */
   canOfferRewarded(): boolean {
-    return this.enabled && this.rewardedReady
+    return this.rewardedAllowed && this.rewardedReady
   }
 
   /**
@@ -180,7 +204,7 @@ class AdService {
    * earned the reward (watched it through).
    */
   async showRewarded(): Promise<boolean> {
-    if (!this.enabled || !this.rewardedReady) return false
+    if (!this.rewardedAllowed || !this.rewardedReady) return false
     try {
       const reward = await AdMob.showRewardVideoAd()
       return !!reward && reward.amount > 0
@@ -192,10 +216,12 @@ class AdService {
     }
   }
 
-  /** Called after a successful "remove ads" purchase. */
+  /**
+   * Called after a successful "remove ads" purchase. Kills the intrusive
+   * formats only — the opt-in rewarded placements stay (see rewardedAllowed).
+   */
   disableAds(): void {
     this.interstitialReady = false
-    this.rewardedReady = false
     void this.hideBanner()
   }
 }

@@ -8,3 +8,6 @@ dist/
 /playwright-report/
 /blob-report/
 .asc-createapp.mjs
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json

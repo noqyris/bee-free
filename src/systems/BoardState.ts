@@ -2,50 +2,58 @@ import type { Axial, CellOccupant, GameStatus, LevelData, TapOutcome } from '../
 import { axialKey, step } from './HexGrid'
 import { createOccupant } from './occupants'
 
-/** A cell currently covered in fresh honey, with the moves left before it dries. */
-export interface WetCell {
-  readonly q: number
-  readonly r: number
-  /** Moves remaining while it still catches bees. Infinity for level honey. */
-  readonly movesLeft: number
-}
-
 /**
  * Pure game-state model: no Phaser, no rendering, no timing.
  * The runtime scene, the offline generator, and the solver all drive this
  * same class, so gameplay rules exist in exactly one place.
  *
- * THE CORE RULE — the honey trail. Every bee that flies smears honey over each
- * cell it crosses. That honey is sticky for `dryMoves` further moves and then
- * dries away. A bee that flies into sticky honey stops dead in it and becomes a
- * blocker until it is tapped onward, which costs a move it cannot spare.
+ * THE CORE RULE — permanent honey. Every cell a bee sits on is honey from the
+ * start, and every cell a bee flies over turns to honey too. Honey never dries
+ * on its own. A bee that flies into any honey stops dead in it — and COLLECTS
+ * it: the landing cell's honey is soaked up (removed from the board) and counts
+ * toward the honey currency the run earns. So a stuck bee's cell is clean once
+ * it flies onward.
  *
- * So the only question that matters is the ORDER: fly a bee too early and its
- * trail is still wet when the next one needs that lane. Note this needs the
- * drying — permanent trails would make ordering irrelevant, because the total
- * number of trail collisions is then fixed no matter what order you play (each
- * cell covered by k different flight paths costs exactly k-1 stops). Drying is
- * what turns the board into a scheduling puzzle instead of a fixed toll.
+ * The puzzle is the ORDER: each bee lays a honey wall behind it, so you must
+ * clear the hive in a sequence where no bee is forced through an earlier bee's
+ * honey — and a deliberate landing is the pressure valve: it costs a move but
+ * eats one honey cell (reopening that cell) and pays one honey.
  */
 export class BoardState {
   movesUsed = 0
 
   private cellSet = new Set<string>()
-  /** Level-authored honey: permanent, never dries. */
+  /** All honey on the board: level honey + honey under bees + laid trails. */
   private honeySet = new Set<string>()
-  /** Trail honey: cell key → the move index at which it dries out. */
-  private wetUntil = new Map<string, number>()
-  private dryMoves = 0
+  /** Honey cells collected this run (a bee landing on honey soaks it up). */
+  private collected = 0
   private budget = 0
   private occupants = new Map<string, CellOccupant>()
   private queenViolated = false
+  /** Compass mode: rotation is legal and every escape must pass a color gate. */
+  private compassMode = false
+  /** Gate colors keyed `cellKey|dir` — the rim crossing they guard. */
+  private gateMap = new Map<string, number>()
 
   constructor(level?: LevelData) {
     if (!level) return
+    this.compassMode = level.compass === true
     for (const [q, r] of level.cells) this.cellSet.add(axialKey(q, r))
-    for (const [q, r] of level.honeyCells ?? []) this.honeySet.add(axialKey(q, r))
+    for (const [q, r, dir, color] of level.gates ?? []) {
+      const key = axialKey(q, r)
+      if (!this.cellSet.has(key)) {
+        throw new Error(`Level ${level.id}: gate at (${q},${r}) is off the board`)
+      }
+      this.gateMap.set(`${key}|${dir}`, color)
+    }
+    for (const [q, r] of level.honeyCells ?? []) {
+      const key = axialKey(q, r)
+      if (!this.cellSet.has(key)) {
+        throw new Error(`Level ${level.id}: honey at (${q},${r}) is off the board`)
+      }
+      this.honeySet.add(key)
+    }
     this.budget = level.moveBudget
-    this.dryMoves = level.dryMoves ?? 0
 
     let nextId = 1
     for (const spec of level.bees) {
@@ -56,7 +64,16 @@ export class BoardState {
       if (this.occupants.has(key)) {
         throw new Error(`Level ${level.id}: two occupants share cell (${spec.q},${spec.r})`)
       }
-      this.occupants.set(key, createOccupant(nextId++, spec))
+      // A bad dir (hand-authored level, corrupted JSON) would otherwise index
+      // DIRECTION_VECTORS as undefined and silently "escape" through NaN-land.
+      if (spec.kind !== 'hornet' && (!Number.isInteger(spec.dir) || spec.dir < 0 || spec.dir > 5)) {
+        throw new Error(`Level ${level.id}: bee at (${spec.q},${spec.r}) has invalid dir ${spec.dir}`)
+      }
+      const occ = createOccupant(nextId++, spec)
+      this.occupants.set(key, occ)
+      // Honey sits under every bee/queen from the start (walls-to-be). Hornets
+      // are stone, not honey.
+      if (occ.isGoal()) this.honeySet.add(key)
     }
   }
 
@@ -64,14 +81,9 @@ export class BoardState {
     return this.cellSet
   }
 
-  /** Level-authored (permanent) honey only. */
+  /** All honey (permanent). */
   get honey(): ReadonlySet<string> {
     return this.honeySet
-  }
-
-  /** How long this level's trails stay sticky; 0 means the trail is off. */
-  get trailDryMoves(): number {
-    return this.dryMoves
   }
 
   get moveBudget(): number {
@@ -107,29 +119,26 @@ export class BoardState {
     return this.queenViolated
   }
 
-  /** Is this cell sticky right now — level honey, or a trail that has not dried? */
+  /** Honey cells collected this run — a bee landing on honey soaks it up. */
+  get collectedHoney(): number {
+    return this.collected
+  }
+
+  /** Is this cell honey right now? */
   isSticky(q: number, r: number): boolean {
-    return this.stickyKey(axialKey(q, r))
+    return this.honeySet.has(axialKey(q, r))
   }
 
   private stickyKey(key: string): boolean {
-    if (this.honeySet.has(key)) return true
-    const until = this.wetUntil.get(key)
-    return until !== undefined && until > this.movesUsed
+    return this.honeySet.has(key)
   }
 
-  /** Every sticky cell for rendering, newest trails included. */
-  stickyCells(): WetCell[] {
-    const out: WetCell[] = []
+  /** Every honey cell, for rendering. */
+  stickyCells(): Axial[] {
+    const out: Axial[] = []
     for (const key of this.honeySet) {
       const [q, r] = key.split(',').map(Number)
-      out.push({ q, r, movesLeft: Infinity })
-    }
-    for (const [key, until] of this.wetUntil) {
-      if (until <= this.movesUsed) continue
-      if (this.honeySet.has(key)) continue
-      const [q, r] = key.split(',').map(Number)
-      out.push({ q, r, movesLeft: until - this.movesUsed })
+      out.push({ q, r })
     }
     return out
   }
@@ -149,17 +158,57 @@ export class BoardState {
   trace(occ: CellOccupant): TapOutcome {
     const path: Axial[] = []
     let pos: Axial = { q: occ.q, r: occ.r }
+    let prev: Axial = pos
     for (;;) {
+      prev = pos
       pos = step(pos, occ.dir)
       const key = axialKey(pos.q, pos.r)
-      if (!this.cellSet.has(key)) return { kind: 'escaped', path }
+      if (!this.cellSet.has(key)) {
+        // Compass rule: the rim is a wall except at a gate of the bee's color —
+        // a wrong-colored crossing bounces exactly like a bump.
+        if (this.compassMode && !this.gateMatches(prev, occ.dir, occ.color))
+          return { kind: 'blocked', path, blocker: pos }
+        return { kind: 'escaped', path }
+      }
       const blocker = this.occupants.get(key)
       if (blocker?.blocksFlight()) return { kind: 'blocked', path, blocker: pos }
-      // Sticky honey catches the bee (its own start cell is never re-checked
-      // since we step first, so a bee sitting in honey flies off it normally).
+      // Honey catches the bee. Its own start cell is never re-checked (we step
+      // first), so a bee sitting in honey flies off it normally.
       if (this.stickyKey(key)) return { kind: 'stuck', path, at: { q: pos.q, r: pos.r } }
       path.push(pos)
     }
+  }
+
+  private gateMatches(lastCell: Axial, dir: number, color: number | undefined): boolean {
+    const gate = this.gateMap.get(`${axialKey(lastCell.q, lastCell.r)}|${dir}`)
+    return gate !== undefined && gate === color
+  }
+
+  /** Whether this board plays under Compass rules (rotation + color gates). */
+  get isCompass(): boolean {
+    return this.compassMode
+  }
+
+  /** Gate entries as [q, r, dir, color] — for rendering and tooling. */
+  get gates(): Array<[number, number, number, number]> {
+    return [...this.gateMap.entries()].map(([k, color]) => {
+      const [cell, dir] = k.split('|')
+      const [q, r] = cell.split(',').map(Number)
+      return [q, r, Number(dir), color]
+    })
+  }
+
+  /**
+   * Compass-mode rotation: turn the bee 60° counter-clockwise (one direction
+   * step). FREE — the cost model of the mode charges flights, not aiming; the
+   * puzzle is the route, not the dexterity. No-op outside compass mode.
+   */
+  rotate(q: number, r: number): number | undefined {
+    if (!this.compassMode || this.status !== 'playing') return undefined
+    const occ = this.occupantAt(q, r)
+    if (!occ || !occ.isTappable()) return undefined
+    occ.dir = (occ.dir + 1) % 6
+    return occ.dir
   }
 
   /**
@@ -179,27 +228,85 @@ export class BoardState {
       // Queen must be last: if she leaves with any goal still on the board, lose.
       if (occ.kind === 'queen' && this.goalRemaining > 0) this.queenViolated = true
     } else if (outcome.kind === 'stuck') {
-      // Relocate the occupant onto the honey cell; it stays as a blocker.
+      // Relocate the occupant onto the honey cell; it stays as a blocker — and
+      // it COLLECTS the honey it landed in: the cell is clean from now on and
+      // the run banks one honey. Landing is how honey is harvested.
       this.occupants.delete(axialKey(q, r))
       occ.q = outcome.at.q
       occ.r = outcome.at.r
       this.occupants.set(axialKey(occ.q, occ.r), occ)
+      this.honeySet.delete(axialKey(occ.q, occ.r))
+      this.collected++
     }
-    // Honey is smeared over every cell the bee actually flew over — a bump
-    // counts, because the bee still made the trip before bouncing back.
+    // Permanent honey is smeared over every cell the bee actually flew over — a
+    // bump counts, because the bee still made the trip before bouncing back.
     this.layTrail(outcome.path)
     return outcome
   }
 
   private layTrail(path: ReadonlyArray<Axial>): void {
-    if (this.dryMoves <= 0) return
-    const until = this.movesUsed + this.dryMoves
-    for (const cell of path) this.wetUntil.set(axialKey(cell.q, cell.r), until)
-    // Drop dried entries so the map (and every stateKey built from it) stays
-    // proportional to what is actually wet, not to the length of the game.
-    for (const [key, dries] of this.wetUntil) {
-      if (dries <= this.movesUsed) this.wetUntil.delete(key)
+    for (const cell of path) this.honeySet.add(axialKey(cell.q, cell.r))
+  }
+
+  /**
+   * Trace a HONEY-CLEAN flight: the bee flies straight through honey (it does not
+   * stick), stopping only at the board edge or a solid blocker. Used by the Honey
+   * Cleaner power-up. Returns the crossed cells and whether it left the board.
+   */
+  private traceClean(occ: CellOccupant): { escaped: boolean; path: Axial[]; blocker?: Axial } {
+    const path: Axial[] = []
+    let pos: Axial = { q: occ.q, r: occ.r }
+    let prev: Axial = pos
+    for (;;) {
+      prev = pos
+      pos = step(pos, occ.dir)
+      const key = axialKey(pos.q, pos.r)
+      if (!this.cellSet.has(key)) {
+        // The cleaner obeys gates too: no power-up may smuggle a bee through a
+        // wrong-colored rim.
+        if (this.compassMode && !this.gateMatches(prev, occ.dir, occ.color))
+          return { escaped: false, path, blocker: { q: pos.q, r: pos.r } }
+        return { escaped: true, path }
+      }
+      const blocker = this.occupants.get(key)
+      if (blocker?.blocksFlight()) return { escaped: false, path, blocker: { q: pos.q, r: pos.r } }
+      path.push(pos) // fly THROUGH honey rather than sticking
     }
+  }
+
+  /**
+   * Non-mutating preview of a Honey Cleaner flight, for the aim UI. Mirrors
+   * exactly what tapClean would do: fly THROUGH honey, stop only at the board
+   * edge or a solid blocker. Without this the preview would show the normal
+   * sticky trace — the opposite of what the armed power-up will actually do.
+   */
+  previewClean(occ: CellOccupant): TapOutcome {
+    const { escaped, path, blocker } = this.traceClean(occ)
+    if (escaped) return { kind: 'escaped', path }
+    return { kind: 'blocked', path, blocker: blocker! }
+  }
+
+  /**
+   * Honey Cleaner power-up: fly the occupant, wiping honey off its start cell and
+   * every cell it crosses instead of laying more. If the lane clears to the edge
+   * the bee escapes; if a wall/bee blocks it, the bee stays but the honey it flew
+   * over is still gone (so a sealed lane can be reopened for the others).
+   */
+  tapClean(q: number, r: number): TapOutcome | undefined {
+    if (this.status !== 'playing') return undefined
+    const occ = this.occupantAt(q, r)
+    if (!occ || !occ.isTappable()) return undefined
+    const { escaped, path, blocker } = this.traceClean(occ)
+    this.movesUsed++
+    // Wipe honey from the start cell and the whole flown path.
+    this.honeySet.delete(axialKey(occ.q, occ.r))
+    for (const cell of path) this.honeySet.delete(axialKey(cell.q, cell.r))
+    if (escaped) {
+      this.occupants.delete(axialKey(q, r))
+      if (occ.kind === 'queen' && this.goalRemaining > 0) this.queenViolated = true
+      return { kind: 'escaped', path }
+    }
+    return { kind: 'blocked', path, blocker: blocker! }
   }
 
   /** Direct removal, used by the solver and future obstacle effects. */
@@ -216,16 +323,17 @@ export class BoardState {
     if (n > 0) this.budget += n
   }
 
-  /** Deep-copies occupants and the wet trail; the immutable cell set is shared. */
+  /** Deep-copies occupants and the honey set; the immutable cell set is shared. */
   clone(): BoardState {
     const copy = new BoardState()
     copy.cellSet = this.cellSet
-    copy.honeySet = this.honeySet
-    copy.wetUntil = new Map(this.wetUntil)
-    copy.dryMoves = this.dryMoves
+    copy.honeySet = new Set(this.honeySet)
+    copy.collected = this.collected
     copy.budget = this.budget
     copy.movesUsed = this.movesUsed
     copy.queenViolated = this.queenViolated
+    copy.compassMode = this.compassMode
+    copy.gateMap = this.gateMap // immutable after construction — safe to share
     for (const [key, occ] of this.occupants) copy.occupants.set(key, occ.clone())
     return copy
   }
@@ -239,21 +347,15 @@ export class BoardState {
 
   /**
    * Canonical key of the current position, for solver memoization: occupants
-   * plus the wet trail expressed as moves REMAINING. Relative wetness is what
-   * makes two search branches interchangeable — the absolute move counter must
-   * stay out of the key or nothing would ever merge.
+   * plus the honey set. Two branches are interchangeable only when both the
+   * pieces AND the honey walls they have laid so far match — honey is permanent,
+   * so the order that produced it is what a later branch inherits.
    */
   stateKey(): string {
     const occ = [...this.occupants.values()]
       .map((o) => `${o.kind}:${o.q},${o.r},${o.dir}`)
       .sort()
       .join('|')
-    if (this.wetUntil.size === 0) return occ
-    const wet: string[] = []
-    for (const [key, dries] of this.wetUntil) {
-      if (dries > this.movesUsed) wet.push(`${key}+${dries - this.movesUsed}`)
-    }
-    if (wet.length === 0) return occ
-    return `${occ}#${wet.sort().join(',')}`
+    return `${occ}#${[...this.honeySet].sort().join(',')}`
   }
 }

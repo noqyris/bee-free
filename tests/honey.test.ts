@@ -65,19 +65,75 @@ describe('honey cells', () => {
   })
 })
 
+describe('honey COLLECTION (landing soaks up the cell)', () => {
+  it('landing in honey removes that cell and banks +1 collected', () => {
+    const board = new BoardState(
+      makeLevel({ honeyCells: [[0, 0]], bees: [{ q: -2, r: 0, dir: E, kind: 'bee' }] }),
+    )
+    expect(board.isSticky(0, 0)).toBe(true)
+    board.tap(-2, 0) // stuck at (0,0)
+    expect(board.isSticky(0, 0)).toBe(false) // soaked up
+    expect(board.collectedHoney).toBe(1)
+  })
+
+  it('the collected cell STAYS clean after the bee flies onward', () => {
+    const board = new BoardState(
+      makeLevel({ honeyCells: [[0, 0]], bees: [{ q: -2, r: 0, dir: E, kind: 'bee' }] }),
+    )
+    board.tap(-2, 0) // stuck + collect at (0,0)
+    board.tap(0, 0) // flies off east
+    expect(board.status).toBe('won')
+    expect(board.isSticky(0, 0)).toBe(false) // reopened for anyone else
+  })
+
+  it('a deliberate landing reopens a sealed lane for a later bee', () => {
+    // EAST smears row -2..2; CROSS would stick in it. CROSS lands (collects the
+    // crossing cell), flies onward — and the cell it ate stays clean.
+    const board = new BoardState(
+      makeLevel({
+        cells: (() => {
+          const cells: Array<[number, number]> = []
+          for (let r = -1; r <= 1; r++) for (let q = -2; q <= 2; q++) cells.push([q, r])
+          return cells
+        })(),
+        bees: [
+          { q: -2, r: 0, dir: E, kind: 'bee' },
+          { q: -1, r: 1, dir: Direction.NE, kind: 'bee' },
+        ],
+      }),
+    )
+    board.tap(-2, 0) // escapes east, smears row 0
+    board.tap(-1, 1) // sticks at (0,0), collects it
+    expect(board.collectedHoney).toBe(1)
+    expect(board.isSticky(0, 0)).toBe(false)
+  })
+
+  it('clone preserves the collected count (undo cannot mint or lose honey)', () => {
+    const board = new BoardState(
+      makeLevel({ honeyCells: [[0, 0]], bees: [{ q: -2, r: 0, dir: E, kind: 'bee' }] }),
+    )
+    board.tap(-2, 0)
+    const snap = board.clone()
+    expect(snap.collectedHoney).toBe(1)
+  })
+})
+
 describe('SolverSearch with honey', () => {
-  it('finds a solution that costs more than the bee count (honey adds a tap)', () => {
+  it('finds a solution that costs more than the bee count (honey adds taps)', () => {
     const board = new BoardState(
       makeLevel({
         honeyCells: [[0, 0]],
         bees: [
-          { q: -2, r: 0, dir: E, kind: 'bee' }, // must stick then continue = 2 taps
-          { q: 2, r: 0, dir: E, kind: 'bee' }, // escapes in 1, but blocks A's exit
+          { q: -2, r: 0, dir: E, kind: 'bee' }, // A
+          { q: 2, r: 0, dir: E, kind: 'bee' }, // B
         ],
       }),
     )
-    // Optimal: escape the right bee, then stick + fly the left bee = 3 moves.
-    expect(searchMinMoves(board, 12)).toBe(3)
+    // Under PERMANENT honey-under-bees, B's start cell (2,0) is honey too. So even
+    // after B escapes, A flying East sticks first at the middle honey (0,0) and
+    // AGAIN at B's vacated (2,0) — two forced stops. Escape B, then A: stick(0,0) →
+    // re-fly stick(2,0) → re-fly out = 4 moves.
+    expect(searchMinMoves(board, 12)).toBe(4)
   })
 
   it('detects an unsolvable board where two bees deadlock through the honey', () => {

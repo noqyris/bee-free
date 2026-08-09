@@ -21,7 +21,7 @@ function band(lo: number, hi: number): Array<[number, number]> {
 }
 
 function makeLevel(o: Partial<LevelData>): LevelData {
-  return { id: 900, cells: line(-3, 3), bees: [], moveBudget: 20, threeStarSpare: 0, dryMoves: 2, ...o }
+  return { id: 900, cells: line(-3, 3), bees: [], moveBudget: 20, threeStarSpare: 0, ...o }
 }
 
 /**
@@ -30,27 +30,38 @@ function makeLevel(o: Partial<LevelData>): LevelData {
  *   EAST  at (-2, 0) flies straight down row 0, smearing the whole row.
  *   CROSS at (-1, 1) flies north-east and its very first step is (0, 0) —
  *         squarely in EAST's lane.
- *   FREE  at (2, 1) is one step from the edge, so it leaves no trail at all
- *         and exists purely to burn a move.
+ *   FREE  at (2, 1) is one step from the edge, so it exits cleanly and exists
+ *         purely to burn a move.
  *
- * That makes the order the whole puzzle: EAST → FREE → CROSS clears the board
- * in three taps because FREE's move is exactly the one that dries row 0, while
- * EAST → CROSS → FREE strands CROSS in the honey and needs four.
+ * Under PERMANENT honey the crossing at (0,0) is symmetric: whichever of EAST /
+ * CROSS flies first lays honey there, and the other sticks in it — so exactly one
+ * forced stop is unavoidable, no matter the order.
  */
 const EAST = { q: -2, r: 0, dir: E, kind: 'bee' } as const
 const CROSS = { q: -1, r: 1, dir: NE, kind: 'bee' } as const
 const FREE = { q: 2, r: 1, dir: E, kind: 'bee' } as const
 
-describe('honey trail', () => {
-  it('smears honey over every cell a bee flies across', () => {
-    const board = new BoardState(makeLevel({ bees: [{ q: -3, r: 0, dir: E, kind: 'bee' }] }))
-    board.tap(-3, 0)
-    for (let q = -2; q <= 3; q++) expect(board.isSticky(q, 0), `cell ${q}`).toBe(true)
-    // The cell it took off from is not part of the flight.
-    expect(board.isSticky(-3, 0)).toBe(false)
+describe('permanent honey trail', () => {
+  it('sits under every bee from the very start', () => {
+    const board = new BoardState(makeLevel({ bees: [{ q: -2, r: 0, dir: E, kind: 'bee' }] }))
+    expect(board.isSticky(-2, 0)).toBe(true) // honey under the bee before any move
   })
 
-  it('catches the next bee to cross a fresh trail', () => {
+  it('smears honey over every cell a bee flies across, and it stays', () => {
+    const board = new BoardState(makeLevel({ bees: [{ q: -3, r: 0, dir: E, kind: 'bee' }] }))
+    board.tap(-3, 0)
+    for (let q = -3; q <= 3; q++) expect(board.isSticky(q, 0), `cell ${q}`).toBe(true)
+  })
+
+  it('never dries: the honey is still there after unrelated later moves', () => {
+    const board = new BoardState(makeLevel({ cells: band(-2, 2), bees: [EAST, FREE] }))
+    board.tap(EAST.q, EAST.r)
+    expect(board.isSticky(0, 0)).toBe(true)
+    board.tap(FREE.q, FREE.r) // an unrelated move — honey does NOT dry
+    expect(board.isSticky(0, 0)).toBe(true)
+  })
+
+  it('catches the next bee to cross a laid trail', () => {
     const board = new BoardState(makeLevel({ cells: band(-2, 2), bees: [EAST, CROSS] }))
     expect(board.tap(EAST.q, EAST.r)?.kind).toBe('escaped')
     const out = board.tap(CROSS.q, CROSS.r)
@@ -58,49 +69,16 @@ describe('honey trail', () => {
     if (out?.kind === 'stuck') expect(out.at).toEqual({ q: 0, r: 0 })
   })
 
-  it('dries after exactly dryMoves further moves, and then lets bees through', () => {
-    const board = new BoardState(
-      makeLevel({ dryMoves: 1, cells: band(-2, 2), bees: [EAST, FREE, CROSS] }),
-    )
-    board.tap(EAST.q, EAST.r)
-    expect(board.isSticky(0, 0)).toBe(true)
-    board.tap(FREE.q, FREE.r) // one unrelated move — row 0 dries at the end of it
-    expect(board.isSticky(0, 0)).toBe(false)
-    expect(board.tap(CROSS.q, CROSS.r)?.kind).toBe('escaped')
-    expect(board.status).toBe('won')
-  })
-
-  it('is the reason the order matters: the same board wins or loses on order alone', () => {
-    const level = makeLevel({
-      dryMoves: 1,
-      cells: band(-2, 2),
-      moveBudget: 3,
-      bees: [EAST, FREE, CROSS],
-    })
-
-    const good = new BoardState(level)
-    good.tap(EAST.q, EAST.r)
-    good.tap(FREE.q, FREE.r) // spends the move that dries row 0
-    good.tap(CROSS.q, CROSS.r)
-    expect(good.status).toBe('won')
-
-    const bad = new BoardState(level)
-    bad.tap(EAST.q, EAST.r)
-    bad.tap(CROSS.q, CROSS.r) // glued into row 0 while it is still wet
-    bad.tap(FREE.q, FREE.r)
-    expect(bad.status).toBe('lost')
-  })
-
-  it('a bee sitting in honey flies off it normally', () => {
+  it('a bee flies off the honey it is standing on normally', () => {
     const board = new BoardState(makeLevel({ cells: band(-2, 2), bees: [EAST, CROSS] }))
     board.tap(EAST.q, EAST.r)
-    board.tap(CROSS.q, CROSS.r) // stuck at (0,0)
+    board.tap(CROSS.q, CROSS.r) // stuck at (0,0), now standing in honey
     expect(board.occupantAt(0, 0)).toBeDefined()
     expect(board.tap(0, 0)?.kind).toBe('escaped') // not re-caught by the cell it stands on
     expect(board.status).toBe('won')
   })
 
-  it('a bump still smears honey over the cells the bee crossed before bouncing', () => {
+  it('a bump still smears honey over the cells crossed before bouncing', () => {
     const board = new BoardState(
       makeLevel({
         bees: [
@@ -115,30 +93,42 @@ describe('honey trail', () => {
     expect(board.occupantAt(-3, 0)).toBeDefined() // bounced back home
   })
 
-  it('leaves no trail at all when dryMoves is 0', () => {
-    const board = new BoardState(
-      makeLevel({ dryMoves: 0, bees: [{ q: -3, r: 0, dir: E, kind: 'bee' }] }),
-    )
-    board.tap(-3, 0)
-    expect(board.stickyCells()).toEqual([])
+  it('order is the whole puzzle: the queen must leave last or the level is lost', () => {
+    // A clean order-dependent case: fly the worker first, then the queen, and the
+    // board is won; release the queen while a worker remains and it is an instant,
+    // unrecoverable loss.
+    const level = makeLevel({
+      cells: band(-2, 2),
+      bees: [
+        { q: -2, r: 1, dir: E, kind: 'queen' },
+        { q: -2, r: -1, dir: E, kind: 'bee' },
+      ],
+    })
+    const good = new BoardState(level)
+    good.tap(-2, -1) // worker out first
+    good.tap(-2, 1) // queen last
+    expect(good.status).toBe('won')
+
+    const bad = new BoardState(level)
+    bad.tap(-2, 1) // queen leaves while the worker is still home
+    expect(bad.status).toBe('lost')
   })
 })
 
-describe('SolverSearch with the trail', () => {
+describe('SolverSearch with the permanent trail', () => {
   it('counts the extra tap a forced honey-stop costs', () => {
-    // Two crossing lanes and nothing to spend a drying move on: whichever bee
-    // flies first, the other must stop in its trail. Two bees, three taps.
-    const board = new BoardState(
-      makeLevel({ dryMoves: 3, cells: band(-2, 2), bees: [EAST, CROSS] }),
-    )
+    // Two crossing lanes: whichever bee flies first, the other must stop in its
+    // honey and re-fly. Two bees, three taps.
+    const board = new BoardState(makeLevel({ cells: band(-2, 2), bees: [EAST, CROSS] }))
     expect(searchMinMoves(board, 8)).toBe(3)
   })
 
-  it('finds the order that dodges the trail when one exists', () => {
-    const board = new BoardState(
-      makeLevel({ dryMoves: 1, cells: band(-2, 2), bees: [EAST, FREE, CROSS] }),
-    )
-    expect(searchMinMoves(board, 8)).toBe(3) // one tap per bee — no stops needed
+  it('cannot dodge the stop under permanent honey (an idle bee does not help)', () => {
+    // With drying, spending FREE's move used to let row 0 clear so all three bees
+    // escaped clean. Permanent honey removes that escape hatch: the EAST/CROSS
+    // crossing still forces exactly one stop, so it is four taps, not three.
+    const board = new BoardState(makeLevel({ cells: band(-2, 2), bees: [EAST, FREE, CROSS] }))
+    expect(searchMinMoves(board, 8)).toBe(4)
   })
 
   it('still reports null for a board no order can clear', () => {

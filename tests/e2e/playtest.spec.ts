@@ -95,7 +95,17 @@ async function tapCell(page: Page, snap: BoardSnapshot, q: number, r: number): P
   await page.mouse.down()
   await page.waitForTimeout(60) // hold to show the aim preview
   await page.mouse.up()
-  await page.waitForTimeout(420) // flight + resolution
+  // Phaser processes pointer events on its NEXT update frame — checking
+  // inputLocked immediately would pass before the flight even starts. Give it
+  // two frames to begin, THEN wait for the flight to resolve (input unlock);
+  // long flights on the bigger boards outlast any fixed delay.
+  await page.waitForTimeout(120)
+  await page.waitForFunction(() => {
+    const g = (window as any).__game
+    const s: any = g.scene.getScene('Game')
+    return !s || !s.scene.isActive() || !s.inputLocked
+  }, null, { timeout: 10_000 })
+  await page.waitForTimeout(120)
 }
 
 test.describe('Bee Free — full playtest', () => {
@@ -213,7 +223,10 @@ test.describe('Bee Free — full playtest', () => {
   test('a flying bee lays a honey trail behind it', async ({ page }) => {
     await startLevel(page, 20)
     const snap = await snapshot(page)
-    expect(snap.sticky, 'a fresh board starts clean').toBe(0)
+    // Permanent honey sits under every goal occupant from the very start —
+    // a "fresh" board carries exactly one honey cell per bee/queen.
+    const goals = snap.occupants.filter((o) => o.kind !== 'hornet').length
+    expect(snap.sticky, 'fresh board: honey only under the bees').toBe(goals)
 
     const flier = snap.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'escaped')
     if (!flier) throw new Error('no bee with a clear path on level 21')
@@ -230,7 +243,15 @@ test.describe('Bee Free — full playtest', () => {
     for (let idx = 20; idx < 34 && !caught; idx++) {
       await startLevel(page, idx)
       const snap = await snapshot(page)
-      const flier = snap.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'escaped')
+      // Never fly the queen while others remain — that is an instant loss, and
+      // on the current boards she is often the first bee with a clear path.
+      const goals = snap.occupants.filter((o) => o.kind !== 'hornet').length
+      const flier = snap.occupants.find(
+        (o) =>
+          o.kind !== 'hornet' &&
+          o.outcome === 'escaped' &&
+          !(o.kind === 'queen' && goals > 1),
+      )
       if (!flier) continue
       await tapCell(page, snap, flier.q, flier.r)
 
@@ -245,7 +266,12 @@ test.describe('Bee Free — full playtest', () => {
       // It did not escape — it stopped in the honey and still counts as a goal.
       expect(after.remaining).toBe(before)
       expect(after.movesLeft).toBe(mid.movesLeft - 1)
-      expect(after.occupants.some((o) => o.q !== sticky.q || o.r !== sticky.r)).toBe(true)
+      // The bee RELOCATED: its start cell is now empty (nobody else can have
+      // moved onto it — only one bee flew), while the goal count held above.
+      expect(
+        after.occupants.some((o) => o.q === sticky.q && o.r === sticky.r),
+        'the stuck bee should have left its start cell',
+      ).toBe(false)
     }
     expect(caught, 'expected a trail to strand a bee somewhere in L21–L34').toBe(true)
   })

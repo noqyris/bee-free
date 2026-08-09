@@ -9,14 +9,16 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Load local save into memory before any scene reads progress.
-    saveManager.load()
-
-    // Monetization warms up in the background — it must never delay or block
-    // the player getting to the game, and it is inert on web.
-    // Purchases first: a restored "remove ads" entitlement suppresses ad setup.
-    void purchaseService.init().then(() => adService.init())
-
-    this.scene.start('Preload')
+    // Load the local save into memory — and on native, reconcile it with the
+    // Preferences mirror (iOS can purge WKWebView localStorage; the mirror is
+    // what keeps bought power-ups and progress alive) — before any scene reads
+    // progress. hydrate() resolves instantly on web.
+    void saveManager.hydrate().finally(() => {
+      // Monetization warms up in the background — it must never delay or block
+      // the player getting to the game, and it is inert on web.
+      // Purchases first: a restored "remove ads" entitlement suppresses ad setup.
+      void purchaseService.init().then(() => adService.init())
+      this.scene.start('Preload')
+    })
   }
 }

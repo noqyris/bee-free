@@ -33,6 +33,8 @@ export interface CellOccupant {
   q: number
   r: number
   dir: Direction
+  /** Compass-mode gate color (palette index); undefined on campaign levels. */
+  readonly color?: number
   /** Whether tapping this occupant does anything right now. */
   isTappable(): boolean
   /** Whether a flying bee is stopped by this occupant. */
@@ -47,6 +49,11 @@ export interface BeeSpec {
   readonly r: number
   readonly dir: Direction
   readonly kind: OccupantKind
+  /**
+   * Compass-mode gate color (palette index). A colored bee may only exit the
+   * board through a gate of the same color. Absent on campaign levels.
+   */
+  readonly color?: number
 }
 
 export interface LevelData {
@@ -57,11 +64,6 @@ export interface LevelData {
   readonly cells: ReadonlyArray<readonly [number, number]>
   /** Honey cells [q, r]: a bee flying through an empty one gets stuck there. */
   readonly honeyCells?: ReadonlyArray<readonly [number, number]>
-  /**
-   * How many moves the honey a flying bee leaves behind stays sticky for.
-   * 0 disables the trail entirely (used by unit tests of the base rules).
-   */
-  readonly dryMoves?: number
   readonly bees: ReadonlyArray<BeeSpec>
   readonly moveBudget: number
   /** Moves that must be left over (>=) on a win to earn 3 stars. */
@@ -72,6 +74,24 @@ export interface LevelData {
   readonly difficulty?: number
   /** Longest forced ordering chain from the solver. */
   readonly depDepth?: number
+  /**
+   * "Sticky Hive" special level: the board starts part-flooded with honey and
+   * landings carve it clean — drives the badge, the honey-payout cap, and the
+   * hop-aware doomed/star estimators in the scene.
+   */
+  readonly flooded?: boolean
+  /**
+   * Compass-mode level: tapping a bee ROTATES it (free), tapping its lane
+   * launches it, and every escape must pass through a gate of the bee's color
+   * (any other rim is a wall). Campaign levels leave this unset.
+   */
+  readonly compass?: boolean
+  /**
+   * Compass gates: [q, r, dir, color] — an exit through board-edge cell (q,r)
+   * flying in `dir` is a gate of `color`. All other rim crossings are blocked
+   * in compass mode.
+   */
+  readonly gates?: ReadonlyArray<readonly [number, number, number, number]>
 }
 
 export type TapOutcome =

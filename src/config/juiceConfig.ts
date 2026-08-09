@@ -71,6 +71,18 @@ export const juice = {
     wiggleMs: 1300,
     wiggleJitterMs: 400,
   },
+  /** Honey blobs appearing along a flown path, rippling in the bee's wake. */
+  honey: {
+    layStaggerMs: 45,
+    splashDots: 3,
+  },
+  /** Press-to-aim feedback: the grabbed bee lifts slightly under the finger. */
+  press: {
+    liftScale: 1.12,
+    liftMs: 70,
+    /** Preview dims to this alpha while the finger has slid off the bee. */
+    cancelAlpha: 0.22,
+  },
   spawn: {
     staggerMs: 28,
     popMs: 240,
@@ -92,5 +104,10 @@ export const juice = {
     resultDelayLoseMs: 520,
     menuBeeBobMs: 1100,
     failBeeWobbleMs: 900,
+    /** Cross-scene fade (Home ↔ Menu ↔ Game ↔ Shop). */
+    sceneFadeMs: 150,
+    /** Doomed moves-pill pulse (movesLeft < bees remaining). */
+    doomedPulseMs: 640,
+    doomedPulseAlpha: 0.35,
   },
 } as const

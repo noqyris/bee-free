@@ -2,7 +2,7 @@ import type { BeeSpec, Direction, LevelData, OccupantKind } from '../types'
 import generated from './levels.generated.json'
 
 /**
- * The shipped 150 levels, produced offline by `npm run gen:levels` and loaded
+ * The shipped 300 levels, produced offline by `npm run gen:levels` and loaded
  * as static JSON (spec §4 — never generated at runtime). The JSON stores plain
  * numbers; we map them onto the typed LevelData shape here.
  */
@@ -11,7 +11,6 @@ const LEVELS: ReadonlyArray<LevelData> = generated.levels.map((l) => ({
   chapter: l.chapter,
   cells: l.cells.map((c) => [c[0], c[1]] as readonly [number, number]),
   honeyCells: (l.honeyCells ?? []).map((c) => [c[0], c[1]] as readonly [number, number]),
-  dryMoves: l.dryMoves ?? 0,
   bees: l.bees.map(
     (b): BeeSpec => ({ q: b.q, r: b.r, dir: b.dir as Direction, kind: b.kind as OccupantKind }),
   ),
@@ -19,6 +18,7 @@ const LEVELS: ReadonlyArray<LevelData> = generated.levels.map((l) => ({
   threeStarSpare: l.threeStarSpare,
   difficulty: l.difficulty,
   depDepth: l.depDepth,
+  flooded: (l as { flooded?: boolean }).flooded ?? false,
 }))
 
 export { LEVELS }

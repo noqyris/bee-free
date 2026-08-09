@@ -175,10 +175,13 @@ function isSolvable(occ: ReadonlyArray<SolverBee>, boardSet: ReadonlySet<string>
 }
 
 /**
- * Runtime hint: a goal that is safe to escape now — a non-queen bee with a clear
- * path, or the queen once she is the last goal. null if none/board clear.
+ * STRUCTURAL helper only — honey-blind, NOT a gameplay hint. It sees occupants
+ * but not the permanent honey, so a bee it calls "free" can still fly straight
+ * into a trail and stick. For a real hint use SolverSearch.nextSolvingMove,
+ * which plays the actual BoardState rules. This exists for generator/test code
+ * that reasons about bump-freedom alone.
  */
-export function nextSafeMove(
+export function nextBumpFreeMove(
   occ: ReadonlyArray<SolverBee>,
   boardSet: ReadonlySet<string>,
 ): SolverBee | null {
