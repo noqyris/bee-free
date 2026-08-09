@@ -174,7 +174,7 @@ with `Shop` reachable from Home/Menu. Full graph + per-scene detail in
 - **Capacitor 8 CLI needs Node ≥ 22** (`nvm use 22` before `npx cap sync ios`).
   The rest of the toolchain is fine on Node 21.
 - **Bump the iOS build number before every upload** — App Store Connect rejects a
-  duplicate. Currently at **v1.1, build 20** (the shipped 1.0's train is closed
+  duplicate. Currently at **v1.1, build 25** (the shipped 1.0's train is closed
   on ASC — new builds must ride 1.1+).
 - **iPad orientation must list all four** in Info.plist or Apple rejects the
   portrait-only app (error 90474). iPhone stays portrait-locked.

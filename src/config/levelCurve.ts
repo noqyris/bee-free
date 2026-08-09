@@ -415,24 +415,29 @@ export function slotFor(id: number): LevelSlot {
   }
   planningTarget = clamp(planningTarget, 0, 0.6)
 
-  // Planner (previewing-human) floor — the round-4 bar. Measured before it
-  // existed: chapter 2 averaged 21% with HALF its levels at 0% (the tester
-  // cruised them); chapters 8-12 already measured 56-72%, so the floor binds
-  // exactly where the game was soft. Climbs 0.15 → 0.35 by ~L120. Spikes aim
-  // higher, breathers at the line — same saw-tooth as the greedy metric.
-  // Round 5 rewrite. Two things were wrong with the old line. It started at L26,
-  // leaving 25 levels that a one-ply player provably never loses (measured: all
-  // 25 at exactly 0.00). And its 0.35 plateau was decorative — the back half
-  // measured 0.72–0.75 against it, so the floor bound nothing where it claimed
-  // to bind hardest. It now starts once honey has been taught (L12) and
-  // plateaus at 0.45, which the deep end already clears comfortably.
-  // Held flat across L12–18 rather than ramping and then dipping for the queen:
-  // her rule is the lesson at L16, and stacking a lookahead demand on top of it
-  // is what made L16 a wall before. A flat shelf gives her that room while
-  // keeping the floor monotonic, which the curve is required to be.
+  // Planner (previewing-human) floor — the round-4 bar, and THE BAR THE SHIPPED
+  // SET WAS BUILT TO. Measured before it existed: chapter 2 averaged 21% with
+  // HALF its levels at 0% (the tester cruised them); chapters 8-12 already
+  // measured 56-72%, so the floor binds exactly where the game was soft. Climbs
+  // 0.15 → 0.35 by ~L120. Spikes aim higher, breathers at the line — the same
+  // saw-tooth as the greedy metric.
+  //
+  // ⚠️  THIS LINE MUST MATCH levels.generated.json. It is an input to the
+  // generator, not a description of it: raising it here without re-running
+  // `npm run gen:levels` does not make a single shipped level harder, it just
+  // makes the config lie. That is exactly what happened once — a "round 5"
+  // rewrite moved the start L26 → L12 and the plateau 0.35 → 0.45 and was never
+  // generated, leaving 45 shipped levels quietly below their own stated floor
+  // for as long as the file said otherwise. `difficultyCurve.test.ts` now pins
+  // EVERY level against this line, so the same drift fails the suite instead.
+  //
+  // The round-5 proposal is still worth doing — it starts the demand once honey
+  // has been taught (L12) instead of leaving 25 levels a one-ply player provably
+  // cannot lose, and it lifts a plateau the back half already clears at 0.72–0.75.
+  // Doing it means: raise the line here, run `npm run gen:levels` (~90 min), and
+  // re-playtest. Until that regeneration happens, the line stays where the data is.
   let plannerFloor = 0
-  if (id >= 12) plannerFloor = 0.08
-  if (id >= 19) plannerFloor = clamp(lerp(0.13, 0.45, (id - 19) / 91), 0.13, 0.45)
+  if (id >= 26) plannerFloor = clamp(lerp(0.15, 0.35, (id - 26) / 94), 0.15, 0.35)
   if (isFlooded) plannerFloor = Math.max(plannerFloor, id <= 55 ? 0.2 : 0.3)
   let plannerTarget = plannerFloor + (isSpike ? 0.18 : isBreather ? 0.02 : 0.1)
   plannerTarget = clamp(plannerTarget, 0, 0.7)

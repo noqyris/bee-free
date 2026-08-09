@@ -121,24 +121,31 @@ describe('difficulty curve — schedule', () => {
     expect(slotFor(300).honeyLakes).toBeGreaterThanOrEqual(slotFor(35).honeyLakes)
   })
 
-  it('raises the planner (previewing-human) floor from L12 and never lowers it on the baseline', () => {
-    // The floor used to start at L26, and the shipped set measured all 25
-    // levels before it at EXACTLY 0.00 planner loss — twenty-five levels a
-    // player who looks one move ahead cannot lose. It now starts once honey has
-    // been taught, holds a flat shelf through the queen's introduction (L16–18,
-    // where her rule is the lesson), then climbs to a plateau the deep end
-    // already clears.
-    for (let id = 1; id <= 11; id++) expect(slotFor(id).plannerFloor, `level ${id}`).toBe(0)
-    for (let id = 12; id <= 18; id++)
-      expect(slotFor(id).plannerFloor, `level ${id}`).toBeGreaterThan(0)
+  it('raises the planner (previewing-human) floor from L26 and never lowers it on the baseline', () => {
+    // The teaching band is deliberately below the bar: the floor starts once
+    // the swarm is big enough for order to matter, then climbs 0.15 → 0.35.
+    for (let id = 1; id <= 25; id++) expect(slotFor(id).plannerFloor, `level ${id}`).toBe(0)
     expect(slotFor(26).plannerFloor).toBeGreaterThanOrEqual(0.15)
-    expect(slotFor(120).plannerFloor).toBeGreaterThanOrEqual(0.45)
+    expect(slotFor(120).plannerFloor).toBeGreaterThanOrEqual(0.35)
     const base = buildLevelCurve().filter((s) => s.floodCoverage === 0)
     for (let i = 1; i < base.length; i++) {
       expect(base[i].plannerFloor, `level ${base[i].id}`).toBeGreaterThanOrEqual(
         base[i - 1].plannerFloor,
       )
     }
+  })
+
+  it('every shipped level clears ITS OWN planner floor, not just the block average', () => {
+    // The regression this exists for: `plannerFloor` is an INPUT to the offline
+    // generator, so editing the curve without re-running `npm run gen:levels`
+    // silently decouples config from content. A "round 5" edit once raised the
+    // line (start L26 → L12, plateau 0.35 → 0.45) and was never generated —
+    // 45 shipped levels sat below their own stated floor, and every existing
+    // test passed because they all check chapter AVERAGES. This one does not.
+    const below = LEVELS.filter((l) => plannerLoss(l) < slotFor(l.id).plannerFloor - 1e-9).map(
+      (l) => `L${l.id}: loss ${plannerLoss(l).toFixed(2)} < floor ${slotFor(l.id).plannerFloor.toFixed(2)}`,
+    )
+    expect(below, `regenerate the levels or lower the curve:\n${below.join('\n')}`).toEqual([])
   })
 
   it('schedules Sticky Hive specials every x5 level from L45, at safe coverage', () => {

@@ -9,7 +9,7 @@ stale. Read this before assuming anything from `README.md` or `store/metadata.md
 | | |
 |---|---|
 | Version | **1.1** (`MARKETING_VERSION`) — 1.0 shipped; its ASC train is closed |
-| Build | **20** (`CURRENT_PROJECT_VERSION`) — bump before every upload |
+| Build | **25** (`CURRENT_PROJECT_VERSION`) — bump before every upload |
 | Bundle id | `com.beefree.hiveescape` |
 | Team | `YMN45WC2QR` (Automatic signing) |
 | Device family | Universal (iPhone + iPad, `1,2`) |
@@ -18,6 +18,29 @@ stale. Read this before assuming anything from `README.md` or `store/metadata.md
 
 ## What's built and working
 
+> **Ship-prep pass (Aug 9 2026).** Two "written but never run" gaps closed and
+> the release blockers cleared:
+> - **Compass Hive shipped a 1-level placeholder.** The mode was fully wired and
+>   unlocked after campaign L40, but `compass.generated.json` held a single
+>   `"placeholder": true` board — `genCompassLevels.ts` had never been run to
+>   completion. Generated for real; `npm run gen:compass` now exists so it is a
+>   command and not oral tradition.
+> - **The planner floor had drifted ahead of the data.** A "round 5" rewrite of
+>   `plannerFloor` (start L26 → L12, plateau 0.35 → 0.45) was never followed by
+>   `gen:levels`, leaving **45 shipped levels below their own stated floor**. The
+>   existing tests all checked chapter *averages*, so nothing failed. The curve is
+>   back on the round-4 line the shipped set was actually built to (verified: 0
+>   violations), and `difficultyCurve.test.ts` now pins **every level
+>   individually** so the config can never silently outrun the content again.
+> - **All 7 consumable IAPs created** in App Store Connect over the ASC API
+>   (`inAppPurchases` **v2** — the old "the API can't create products" note was
+>   out of date), each with en-US localization, USD price, 175 territories and a
+>   review screenshot captured straight from the Shop scene
+>   (`scripts/iapReviewShot.mts`). All 7 are **READY_TO_SUBMIT**; Remove Ads
+>   remains APPROVED.
+> - Also: the skipped `bumping a blocked bee` e2e test now runs — and proving it
+>   possible turned up a real fact about the game (see Known issues).
+>
 > **Compass Hive mode (Aug 8 2026, user's rotate+numbered-exits proposal):**
 > research showed the two halves only work TOGETHER and only as a separate
 > mode (free rotation provably collapses the campaign's ordering puzzle;
@@ -106,18 +129,20 @@ stale. Read this before assuming anything from `README.md` or `store/metadata.md
 
 ## Blocked on the user (must happen before the next ship)
 
-1. **Create the 7 consumable IAP products in App Store Connect** as **Consumable**
-   (ids in [MONETIZATION.md](MONETIZATION.md) / `powerups.ts` /
-   [BeeFree.storekit](../ios/App/BeeFree.storekit)). A new IAP must be reviewed
-   *with* a build — attach at least the first to the submission. ASC's API can't
-   create products; do it in the web UI.
-2. **Refresh the store copy.** The app **name / subtitle / keywords** are still
-   accurate, but the **description**, **promotional text**, and the whole of
-   [store/metadata.md](../store/metadata.md) describe the *old* design
-   (150 levels, a *drying* honey trail). Rewrite for **300 levels + permanent
-   honey + power-ups** before submitting.
-3. **Then ship:** bump the build number, `npm run build`, `nvm use 22 && npx cap
-   sync ios`, archive + upload (steps in [RELEASE.md](RELEASE.md)).
+1. ~~Create the 7 consumable IAP products~~ **done (Aug 9 2026)** — created over
+   the ASC API, all **READY_TO_SUBMIT** with price, en-US localization, 175
+   territories and a review screenshot. They still have to be **attached to a
+   submission**: a new IAP is only reviewed alongside a build.
+2. ~~Refresh the store copy~~ **done** — [store/metadata.md](../store/metadata.md)
+   is rewritten for 300 levels + permanent honey + power-ups + Compass Hive, with
+   a new What's New for 1.1. **Still needs pushing to ASC** (web UI; the
+   `scripts/aso-push.mjs` the file used to reference no longer exists).
+3. **Test the StoreKit `transactionUpdated` delivery path on a device** (sandbox
+   Ask-to-Buy) before the consumables go live. Needs real hardware — cannot be
+   done from here.
+4. **Submit for review** when you are ready. Everything up to and including the
+   TestFlight upload is automatable and done; the submission itself is
+   deliberately left to you.
 
 > Do **not** commit / build / ship unless the user explicitly says so. This has
 > been gated by the user repeatedly.
@@ -136,6 +161,13 @@ stale. Read this before assuming anything from `README.md` or `store/metadata.md
 - **Remove-Ads price** shows `2.99` in `BeeFree.storekit` but older docs said
   `0.99` base — the real price is whatever ASC has; treat the config value as a
   display fallback only.
+- **The bump rule never fires from a level's opening position.** Sweeping all 300
+  starts gives 1570 `escaped` + 822 `stuck` and **zero** `blocked`: under
+  permanent honey a bee's neighbours are reachable honey, so it sticks rather
+  than bumping. Bumping only becomes reachable once a bee has landed mid-board
+  and become a wall. Not a bug — the rule is real and the e2e test now
+  manufactures the state to prove it — but worth knowing before writing copy
+  that leans on "blocked → it bumps back" as an opening-move experience.
 
 ## Docs map (which file is the truth)
 

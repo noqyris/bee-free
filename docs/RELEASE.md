@@ -9,7 +9,7 @@ current state in [STATUS.md](STATUS.md).
 
 | | |
 |---|---|
-| Version / build | **1.1 / 20** (bump the build before every upload; the 1.0 train is CLOSED on ASC — 1.0 shipped, so new builds must ride 1.1+) |
+| Version / build | **1.1 / 25** (bump the build before every upload; the 1.0 train is CLOSED on ASC — 1.0 shipped, so new builds must ride 1.1+) |
 | Bundle id | `com.beefree.hiveescape` |
 | Team | `YMN45WC2QR` (Automatic signing) |
 | Device family | Universal (`1,2`) |
@@ -72,22 +72,32 @@ so Restore + reinstall work. Full catalogue in [MONETIZATION.md](MONETIZATION.md
 created and Ready to Submit. Remaining: **attach it to the submission** (a new IAP
 is reviewed with a build).
 
-**7 consumables — NOT yet created in App Store Connect (BLOCKER):**
+**7 consumables — created Aug 9 2026, all `READY_TO_SUBMIT`:**
 
-| id | Type |
-|---|---|
-| `com.beefree.hiveescape.starter` | Consumable |
-| `com.beefree.hiveescape.honey.s` / `.m` / `.l` | Consumable |
-| `com.beefree.hiveescape.pack.clean` / `.undo` / `.moves` | Consumable |
+| id | Type | State |
+|---|---|---|
+| `com.beefree.hiveescape.starter` | Consumable | READY_TO_SUBMIT |
+| `com.beefree.hiveescape.honey.s` / `.m` / `.l` | Consumable | READY_TO_SUBMIT |
+| `com.beefree.hiveescape.pack.clean` / `.undo` / `.moves` | Consumable | READY_TO_SUBMIT |
 
-The ids exist in code and in [BeeFree.storekit](../ios/App/BeeFree.storekit) (so
-they work in Xcode against the local StoreKit config), but must be **created in
-the ASC web UI as Consumable** and attached to a submission before they sell live.
-For each product remember all four gates or it stays incomplete: localization,
-price schedule, review screenshot, **and territory availability** (the separate
-`inAppPurchaseAvailabilities` resource — easy to miss).
+Each has all four gates filled: en-US localization, USD price schedule, **175
+territories** (the separate `inAppPurchaseAvailabilities` resource — easy to
+miss), and a review screenshot. Remaining: **attach them to a submission** — a
+new IAP is only reviewed alongside a build.
 
-> ASC's API cannot create products (or apps) — do it in the web UI.
+> **The ASC API CAN create in-app purchases.** The older note here said it
+> couldn't; that stopped being true when the `inAppPurchases` **v2** endpoints
+> landed. The full create path is `POST /v2/inAppPurchases` →
+> `POST /v1/inAppPurchaseLocalizations` →
+> `POST /v1/inAppPurchasePriceSchedules` (price point id from
+> `GET /v2/inAppPurchases/{id}/pricePoints?filter[territory]=USA`) →
+> `POST /v1/inAppPurchaseAvailabilities` → screenshot reserve/PUT/PATCH via
+> `/v1/inAppPurchaseAppStoreReviewScreenshots`. Creating the **app record**
+> itself is still web-UI only.
+>
+> Review screenshots come straight out of the game:
+> `npx tsx scripts/iapReviewShot.mts out.png` captures the Shop scene at
+> 1242×2208 (the canvas is 9:16, so that size is full-bleed with no letterbox).
 
 ### Testing purchases without ASC
 
@@ -152,7 +162,9 @@ same AuthKey_87V9QK9CTV.p8. Success = HTTP 204; the build flips to
 ### Gotchas hit in practice
 
 - **Bump the build number first.** ASC rejects a duplicate `CURRENT_PROJECT_VERSION`
-  outright. Currently **20**.
+  outright. Currently **25**. Builds 21–24 were uploaded while the docs still
+  said 20 — read `CURRENT_PROJECT_VERSION` in `project.pbxproj`, not this table,
+  if the two ever disagree again.
 - **Error 90474 — iPad multitasking.** A portrait-only universal app is rejected
   unless `UISupportedInterfaceOrientations~ipad` lists **all four** orientations.
   iPhone stays portrait-locked; only the iPad key needs all four (Phaser's FIT

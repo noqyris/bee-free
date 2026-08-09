@@ -176,25 +176,45 @@ test.describe('Bee Free — full playtest', () => {
   })
 
   test('bumping a blocked bee wastes a move', async ({ page }) => {
-    // Find an early level that actually has a blocked bee to bump.
+    // NOT a start-state property: no shipped level opens with a bumpable bee.
+    // Sweeping all 300 openings gives 1570 'escaped' + 822 'stuck' and exactly
+    // ZERO 'blocked' — under permanent honey a bee's neighbours are reachable
+    // honey, so it sticks rather than bumping. The rule only becomes reachable
+    // once a bee has landed mid-board and turned into a wall.
+    //
+    // So the test manufactures that state with a policy it can reproduce
+    // without hard-coding coordinates (which any regeneration would break):
+    // fly the bee whose flight ends 'stuck', then look for whoever it now
+    // blocks. Verified to take a single tap on each level scanned below.
     let snap: BoardSnapshot | undefined
-    for (const idx of [2, 3, 4, 5, 6]) {
+    const isBlocked = (s: BoardSnapshot) =>
+      s.occupants.some((o) => o.kind !== 'hornet' && o.outcome === 'blocked')
+
+    for (const idx of [40, 44, 100, 150, 200, 299]) {
       await startLevel(page, idx)
-      const s = await snapshot(page)
-      if (s.occupants.some((o) => o.kind !== 'hornet' && o.outcome === 'blocked')) {
+      let s = await snapshot(page)
+      for (let tap = 0; tap < 3 && s.status === 'playing' && !isBlocked(s); tap++) {
+        const stuck = s.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'stuck')
+        if (!stuck) break
+        await tapCell(page, s, stuck.q, stuck.r)
+        s = await snapshot(page)
+      }
+      if (isBlocked(s)) {
         snap = s
         break
       }
     }
-    test.skip(!snap, 'no blocked bee found in the early levels')
+    expect(snap, 'no scanned level ever produced a bumpable bee').toBeDefined()
 
     const before = snap!.movesLeft
     const blocked = snap!.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'blocked')!
     await tapCell(page, snap!, blocked.q, blocked.r)
 
     const after = await snapshot(page)
-    expect(after.movesLeft).toBe(before - 1)
-    expect(after.remaining).toBe(snap!.remaining) // nobody escaped
+    expect(after.movesLeft).toBe(before - 1) // the move is spent...
+    expect(after.remaining).toBe(snap!.remaining) // ...and nobody escaped
+    // The bumped bee is still exactly where it was — a bump is not a relocation.
+    expect(after.occupants.some((o) => o.q === blocked.q && o.r === blocked.r)).toBe(true)
   })
 
   test('the queen leaving early loses the level', async ({ page }) => {

@@ -10,9 +10,11 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "gen:levels": "tsx scripts/genLevels.ts",
+    "gen:compass": "tsx scripts/genCompassLevels.ts",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "difficulty": "tsx scripts/difficulty.ts"
+    "difficulty": "tsx scripts/humanDifficulty.ts",
+    "verify:levels": "tsx scripts/verifyAllLevels.mts"
   },
   "dependencies": {
     "@capacitor-community/admob": "^8.0.0",
