@@ -362,6 +362,47 @@ export class BoardState {
     if (n > 0) this.budget += n
   }
 
+  /**
+   * Is the hive SEALED — is there no tap left that both moves something and
+   * does not lose on the spot?
+   *
+   * Two ways a tap can be worthless. It can BUMP: costs a move, smears more
+   * honey, leaves the piece where it was. Or it can be the QUEEN escaping while
+   * workers remain, which is an instant loss. When every remaining option is
+   * one of those, the board is finished as a puzzle even though the move
+   * counter still says otherwise.
+   *
+   * Both clauses are needed, and the second is the one that matters. Measured
+   * over the shipped campaign: 99% of losses are this position rather than a
+   * spent budget, the player still holds ~3.8 moves when it happens — and of
+   * those dead positions, **100%** are "workers all jammed, only the queen can
+   * fly, and flying her loses". A predicate that only checked for bumps found
+   * literally none of them.
+   */
+  isSealed(): boolean {
+    if (this.status !== 'playing') return false
+    const goals = this.goalRemaining
+    for (const occ of this.occupants.values()) {
+      if (!occ.isTappable()) continue
+      const out = this.trace(occ)
+      if (out.kind === 'blocked') continue // moves nothing
+      // Releasing the queen early ends the run; it is not an escape route.
+      if (occ.kind === 'queen' && out.kind === 'escaped' && goals > 1) continue
+      return false
+    }
+    return true
+  }
+
+  /**
+   * Spend one move without moving anything — the price of a rewound mistake.
+   * Without this the rescue would be free, and free rewinds turn the puzzle
+   * into "tap everything until something works", which is no puzzle at all.
+   */
+  chargeMove(): void {
+    if (this.status !== 'playing') return
+    this.movesUsed++
+  }
+
   /** Deep-copies occupants and the honey set; the immutable cell set is shared. */
   clone(): BoardState {
     const copy = new BoardState()

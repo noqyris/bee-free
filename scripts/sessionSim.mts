@@ -16,10 +16,32 @@ import { estimateMinMoves } from '../src/systems/SolverSearch'
 import { LEVELS } from '../src/levels'
 import { makeRng, mixSeed } from '../src/utils/rng'
 import type { LevelData } from '../src/types'
+import generated from '../src/levels/levels.generated.json'
 
 const FROM = Number(process.argv[2] ?? 1)
 const TO = Number(process.argv[3] ?? 300)
 const TRIALS = Number(process.argv[4] ?? 12)
+/** Pass --no-rescue to measure the old behaviour for a before/after. */
+const RESCUE = !process.argv.includes('--no-rescue')
+/**
+ * `--slack N` re-budgets every level to minMoves + N (and asks for at most one
+ * wasted move for 3 stars) instead of using the shipped numbers. Retuning this
+ * way needs no regeneration: minMoves is already recorded and verified for
+ * every level, so the boards are untouched and only the budget moves.
+ */
+const slackArg = process.argv.indexOf('--slack')
+const SLACK = slackArg === -1 ? null : Number(process.argv[slackArg + 1])
+/**
+ * `--noise p` — the share of moves where the player does NOT pick the best one.
+ *
+ * Without this the model is a 1-ply-optimal bot, and an optimal player wins
+ * with zero moves wasted every single time, so stars are always 3 and the
+ * budget can never bind. That is an artefact of the instrument, not of the
+ * game: real players misjudge. Noise is what makes "won, but sloppily" — the
+ * outcome 1- and 2-star wins exist to represent — possible at all.
+ */
+const noiseArg = process.argv.indexOf('--noise')
+const NOISE = noiseArg === -1 ? 0.25 : Number(process.argv[noiseArg + 1])
 
 const FAILS_BEFORE_BONUS = 3
 const BONUS_MOVES = 2
@@ -37,8 +59,15 @@ interface Attempt {
  * what near-miss accounting needs.
  */
 function playOnce(level: LevelData, bonusMoves: number, seed: number): Attempt {
-  const b = new BoardState({ ...level, moveBudget: level.moveBudget + bonusMoves })
+  let b = new BoardState({ ...level, moveBudget: level.moveBudget + bonusMoves })
   const rand = makeRng(mixSeed(seed, 7919))
+  // The dead-end rescue, modelled exactly as the scene applies it: a move that
+  // seals the hive is rewound and charged. `history` is the scene's undo stack;
+  // `forbidden` is the player learning "not that one from here", which is why a
+  // rescue leads somewhere new instead of looping on the same mistake.
+  const history: BoardState[] = []
+  const forbidden = new Set<string>()
+
   for (let s = 0; s < 400; s++) {
     if (b.remaining === 0) {
       const spare = b.moveBudget - b.movesUsed
@@ -46,6 +75,7 @@ function playOnce(level: LevelData, bonusMoves: number, seed: number): Attempt {
       return { won: true, goalsLeft: 0, stars }
     }
     if (b.status !== 'playing') break
+    const posKey = b.stateKey()
     const goalsLeft = b.allOccupants().filter((o) => o.isGoal()).length
     const cands = b
       .allOccupants()
@@ -53,7 +83,18 @@ function playOnce(level: LevelData, bonusMoves: number, seed: number): Attempt {
       .map((o) => ({ o, out: b.trace(o) }))
       .filter((m) => m.out.kind !== 'blocked')
       .filter((m) => !(m.o.kind === 'queen' && m.out.kind === 'escaped' && goalsLeft > 1))
-    if (cands.length === 0) break
+      .filter((m) => !forbidden.has(`${posKey}#${m.o.q},${m.o.r}`))
+    if (cands.length === 0) {
+      // Every move from here either bumps or seals. A real player does not stop
+      // at that moment — they keep trying, each attempt rewound and charged,
+      // until the budget is gone. Modelling that is what makes the loss land on
+      // the MOVE COUNTER (with a countable number of bees left) instead of on
+      // "the simulation gave up", and it is the only way the budget can show up
+      // as a dial at all.
+      b.chargeMove()
+      if (b.status !== 'playing') break
+      continue
+    }
     const scored = cands
       .map((m) => {
         const child = b.clone()
@@ -63,11 +104,28 @@ function playOnce(level: LevelData, bonusMoves: number, seed: number): Attempt {
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
     if (scored.length === 0) break
-    const best = Math.min(...scored.map((x) => x.h))
-    const pool0 = scored.filter((x) => x.h === best)
-    const bestEsc = Math.min(...pool0.map((x) => x.esc))
-    const pool = pool0.filter((x) => x.esc === bestEsc)
-    b.tap(pool[Math.floor(rand() * pool.length)].m.o.q, pool[Math.floor(rand() * pool.length)].m.o.r)
+    let pool: typeof scored
+    if (rand() < NOISE) {
+      pool = scored // a misjudged move: any legal one, best or not
+    } else {
+      const best = Math.min(...scored.map((x) => x.h))
+      const pool0 = scored.filter((x) => x.h === best)
+      const bestEsc = Math.min(...pool0.map((x) => x.esc))
+      pool = pool0.filter((x) => x.esc === bestEsc)
+    }
+    const pick = pool[Math.floor(rand() * pool.length)]
+
+    history.push(b.clone())
+    b.tap(pick.m.o.q, pick.m.o.r)
+
+    if (RESCUE && b.isSealed()) {
+      const prev = history.pop()
+      if (prev) {
+        forbidden.add(`${posKey}#${pick.m.o.q},${pick.m.o.r}`)
+        b = prev
+        b.chargeMove()
+      }
+    }
   }
   return { won: false, goalsLeft: b.remaining, stars: 0 }
 }
@@ -82,7 +140,15 @@ interface LevelStat {
 
 const stats: LevelStat[] = []
 for (let id = FROM; id <= TO; id++) {
-  const level = LEVELS[id - 1]
+  const shipped = LEVELS[id - 1]
+  const min = (generated.levels[id - 1] as { minMoves: number }).minMoves
+  const level: LevelData =
+    SLACK === null
+      ? shipped
+      // 3 stars = spare EQUAL to the slack, i.e. not one move wasted. That is
+      // what turns the budget into a legible ladder: perfect play 3 stars, one
+      // wasted move 2, two wasted 1, and only then a loss.
+      : { ...shipped, moveBudget: min + SLACK, threeStarSpare: SLACK }
   let firstWins = 0
   let attemptsTotal = 0
   let losses = 0
@@ -120,7 +186,9 @@ for (let id = FROM; id <= TO; id++) {
 const avg = (a: number[]): number => a.reduce((x, y) => x + y, 0) / (a.length || 1)
 const pct = (n: number): string => `${(n * 100).toFixed(0)}%`
 
-console.log(`\n=== SESSION SIM  L${FROM}–L${TO}, ${TRIALS} players each ===\n`)
+console.log(
+  `\n=== SESSION SIM  L${FROM}–L${TO}, ${TRIALS} players each  (rescue ${RESCUE ? 'ON' : 'OFF'}, slack ${SLACK ?? 'shipped'}) ===\n`,
+)
 console.log('chapter  firstTryWin  avgTries  nearMiss%  avgStars')
 for (let ch = Math.ceil(FROM / 25); ch <= Math.ceil(TO / 25); ch++) {
   const s = stats.filter((x) => Math.ceil(x.id / 25) === ch)

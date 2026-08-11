@@ -19,6 +19,10 @@ export const en = {
   'hud.moves': 'MOVES',
   'hud.honey': 'Honey: {n}',
   'hud.doomed': 'Not enough moves left — use +3 Moves or restart',
+  // Shown when a move sealed the hive and was rewound. Names the cause ("that
+  // order"), not the player, and says what it cost — a rescue the player does
+  // not understand reads as the game glitching.
+  'hud.sealed': 'That order sealed the hive — move taken back, one move spent',
   'hud.stickyHive': '🍯 STICKY HIVE — carve it clean!',
   'hud.compassBadge': '🧭 COMPASS HIVE',
   'compass.coach': 'Tap a bee to TURN it. Tap its lane to FLY. Match the gate color!',

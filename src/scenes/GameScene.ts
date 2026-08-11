@@ -873,6 +873,57 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * If the move just played SEALED the hive, take it back — and charge a move
+   * for it.
+   *
+   * This is the single biggest change to how the game feels, and it comes
+   * straight out of the session measurements: 99% of losses were the board
+   * sealing shut rather than the budget running out, the player still held ~3.8
+   * moves when it happened, and 2-3 bees were always stranded, never one. So a
+   * loss never said "I almost had it" — it said "there is nothing left to try",
+   * which is the worst thing a puzzle can say to someone deciding whether to
+   * tap Retry. It also made the move budget an inert dial (widening it 1 → 4
+   * moved the win rate 32% → 33%) and flattened stars, because you either
+   * played the exact optimum or died.
+   *
+   * Rewinding turns a positional death into a price. The move is still spent —
+   * a FREE rewind would make the game "tap everything until something works" —
+   * so repeated mistakes still run the budget down and the run still ends, just
+   * with one bee left instead of a locked board.
+   *
+   * Returns true when it handled the move, so the caller stops there.
+   */
+  private rescueIfSealed(): boolean {
+    if (!this.board.isSealed()) return false
+    const entry = this.history.pop()
+    if (!entry) return false // opening position: nothing to step back to
+
+    // Same budget/consumable bookkeeping undo does — a rescue must never
+    // destroy moves or charges the player paid for.
+    const budgetGap = this.board.moveBudget - entry.board.moveBudget
+    if (budgetGap > 0) entry.board.grantExtraMoves(budgetGap)
+    if (entry.cleanSpent) saveManager.grantPowerup('clean', 1)
+
+    this.board = entry.board
+    this.board.chargeMove() // the mistake costs a move, just not the board
+    this.pending = undefined
+    this.previewGfx.clear()
+    this.rebuildBoardView()
+    this.updateMovesHud()
+    this.refreshPowerupCounts()
+    feedback.bump()
+    this.flashToast(t('hud.sealed'))
+
+    // Charging the move can itself end the run — that is the point. Losing now
+    // means the budget ran out, which is the loss the player can learn from.
+    if (this.board.status !== 'playing') {
+      this.resolveAfterAction()
+      return true
+    }
+    return true
+  }
+
+  /**
    * Tear down and respawn all board visuals from the (restored) board state.
    * Sprites come back instantly (no spawn stagger) so the undo reads as a
    * precise step back; honey removed by the restore fades out.
@@ -1801,6 +1852,7 @@ export class GameScene extends Phaser.Scene {
     // The trail was laid the moment the tap resolved; show it once the bee has
     // actually made the trip, so the honey ripples in along its wake.
     this.refreshHoney(true, path)
+    if (this.rescueIfSealed()) return
     const status = this.board.status
     if (status === 'won') {
       // 3 stars require finishing with the level's spare margin left; else 2.
