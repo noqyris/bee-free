@@ -185,6 +185,12 @@ export class GameScene extends Phaser.Scene {
         const off = sprite.getData('arrowOff') as number
         arrow.setPosition(sprite.x + Math.cos(angle) * off, sprite.y + Math.sin(angle) * off)
       }
+      // The shadow tracks position but NEVER rotation — that is the whole
+      // reason it is a separate object instead of part of the sprite sheet.
+      // It also stays level while the bee banks through a flight, which is
+      // what keeps the board reading as a surface with things above it.
+      const shadow = sprite.getData('shadow') as Phaser.GameObjects.Ellipse | undefined
+      if (shadow) shadow.setPosition(sprite.x, sprite.y + this.cellSize * 0.42)
     }
   }
 
@@ -393,6 +399,13 @@ export class GameScene extends Phaser.Scene {
       sprite.setDepth(occ.kind === 'queen' ? 12 : 10)
       this.faceBee(sprite, occ.dir)
 
+      // Grounding shadow, under the bee and under the honey glow, level always.
+      const shadow = this.add
+        .ellipse(x, y + this.cellSize * 0.42, this.cellSize * 0.62, this.cellSize * 0.16, 0x000000, 0.22)
+        .setDepth(occ.kind === 'queen' ? 11 : 9)
+        .setScale(0)
+      sprite.setData('shadow', shadow)
+
       const angle = directionAngle(occ.dir)
       // The chevron used to be the ONLY direction signal, which is why it was
       // flung 0.76×cellSize out — far enough to clear the wide body, and far
@@ -439,6 +452,9 @@ export class GameScene extends Phaser.Scene {
       this.beeSprites.set(occ.id, sprite)
       if (instant) {
         sprite.setScale(this.beeScale)
+        // The instant path (undo, rescue rebuild) skips the pop tween, so the
+        // shadow has to be shown here or every rewound bee floats.
+        ;(sprite.getData('shadow') as Phaser.GameObjects.Ellipse | undefined)?.setScale(1)
         this.startIdle(sprite)
         return
       }
@@ -446,6 +462,8 @@ export class GameScene extends Phaser.Scene {
       // pop fires can cancel it (stopIdle) instead of racing the action tween.
       const spawnTimer = this.time.delayedCall(i * juice.spawn.staggerMs, () => {
         sprite.setData('spawnTimer', undefined)
+        const shadow = sprite.getData('shadow') as Phaser.GameObjects.Ellipse | undefined
+        if (shadow) this.tweens.add({ targets: shadow, scale: 1, duration: juice.spawn.popMs })
         this.tweens.add({
           targets: sprite,
           scale: this.beeScale,
@@ -932,6 +950,7 @@ export class GameScene extends Phaser.Scene {
     for (const sprite of this.beeSprites.values()) {
       ;(sprite.getData('arrow') as Phaser.GameObjects.Image | undefined)?.destroy()
       ;(sprite.getData('crown') as Phaser.GameObjects.Image | undefined)?.destroy()
+      ;(sprite.getData('shadow') as Phaser.GameObjects.Ellipse | undefined)?.destroy()
       this.tweens.killTweensOf(sprite)
       sprite.destroy()
     }
@@ -1559,6 +1578,7 @@ export class GameScene extends Phaser.Scene {
       // taps must never touch the despawning cosmetic sprite.
       ;(sprite.getData('crown') as Phaser.GameObjects.Image | undefined)?.destroy()
       ;(sprite.getData('arrow') as Phaser.GameObjects.Image | undefined)?.destroy()
+      ;(sprite.getData('shadow') as Phaser.GameObjects.Ellipse | undefined)?.destroy()
       this.beeSprites.delete(occ.id)
       this.resolveAfterAction(outcome.path)
     })

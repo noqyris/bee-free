@@ -158,10 +158,10 @@ export class PreloadScene extends Phaser.Scene {
     g.save()
     g.translateCanvas(ox, 0)
 
-    // Soft grounding shadow, drawn before the tilt so it stays level. It
-    // tightens as the wings lift — the bee reads as leaving the ground.
-    g.fillStyle(0x000000, 0.16)
-    g.fillEllipse(62, 116, 74 - wing * 16, 12 - wing * 3)
+    // NO grounding shadow in the sheet. It used to live here, and it was
+    // correct while the sprite never rotated — now that a bee faces its own
+    // heading, a baked shadow swings around with the body and ends up above it.
+    // The scene draws a separate shadow that follows position but not rotation.
 
     // The logo's mark sits at a slight nose-up tilt; everything below is drawn
     // in that local frame, centred on the body. The nose lifts with the beat.
