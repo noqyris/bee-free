@@ -140,6 +140,43 @@ wallet and win streak.
 - **Win** when no goal occupants remain (hornets don't count).
 - **Lose** the instant the queen leaves early (`queenViolated`), or when
   `movesUsed >= moveBudget` with goals still on the board.
+
+### The sealed-hive rescue — you cannot lose to a dead board
+
+A move that leaves the hive **sealed** is rewound, and costs a move
+(`BoardState.isSealed()` + `chargeMove()`, applied in
+`GameScene.rescueIfSealed`). Sealed means every remaining tap either **bumps**
+(moves nothing) or is the **queen escaping while workers remain** (an instant
+loss) — so the board is finished as a puzzle even though the counter says
+otherwise.
+
+This is the single biggest change to how the game feels, and it came out of
+measurement, not taste. Simulating real sessions over the shipped campaign:
+
+- **99% of losses were the board sealing**, not the budget running out (161 vs 2
+  in a 10-level sample).
+- The player still held **~3.8 unspent moves** when it happened, with 2–3 bees
+  stranded — **never one**. So a loss never said "I almost had it", it said
+  "there is nothing left to try".
+- The move budget was therefore an **inert dial**: widening slack from 1 to 4
+  moved the win rate 32% → 33%.
+- And stars had no gradient: with slack 1 under permanent honey you either
+  played the exact optimum or died, so "won, but sloppily" barely existed.
+
+Rewinding turns a positional death into a price. The move is **still spent** — a
+free rewind makes the game "tap everything until something works" — so repeated
+mistakes still drain the budget and the run still ends, just on the move counter
+with a countable number of bees left.
+
+Measured after (L26–L120, previewing-human bot with 25% misjudged moves):
+first-try win 50% → 54%, average stars 3.00 → 2.89, walls 4 → 3, and the budget
+became a working dial at last (slack 1/2/3/4 → 54/56/58/59%).
+
+> Writing the predicate the obvious way was wrong, and only measurement caught
+> it. The first version asked "can any bee still move" and matched **0%** of
+> real dead ends. Classifying 95 actual dead positions showed **100%** are the
+> same shape: workers all jammed, the queen has a clear lane, and taking it
+> loses. **Queen-last is what manufactures every dead end in the game.**
 - `moveBudget = minMoves + slack` (set offline by the generator). `minMoves` is
   the real minimum found by search; `slack` shrinks from ~3 early to 1 late.
 - **Stars** (win screen): 3 stars requires finishing with at least

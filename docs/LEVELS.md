@@ -1,5 +1,23 @@
 # Levels: curve, generator, solver
 
+> **Tuning without regenerating (Aug 2026).** `minMoves` is recorded and
+> verified for every shipped level, so the *budget* can be retuned in seconds
+> where a *board* change costs ~90 minutes. Three tools use that:
+>
+> - `npx tsx scripts/sessionSim.mts [from] [to] [players]` — plays levels in
+>   order with a realistic player (1-ply planning, 25% misjudged moves, the
+>   sealed-hive rescue) and reports first-try win rate, tries per level, walls
+>   and stars. `--no-rescue` and `--slack N` give before/after comparisons.
+> - `npx tsx scripts/retuneBudgets.mts --apply` — grants up to two extra moves
+>   to levels measuring under a 40% first-try win rate. Deliberately a **floor**
+>   and not a target: aiming at real target rates wanted +3 moves on every level
+>   and measured out as trivial for a competent player.
+> - `npx tsx scripts/rescueWalls.mts --apply` — for boards a budget cannot fix,
+>   regenerates them in place from their own curve slot at a softened planner
+>   floor until a candidate both re-proves solvable and clears the win floor.
+>   Levels stamp the floor they were actually built to, and
+>   `difficultyCurve.test.ts` pins each one against that.
+
 All 300 levels are generated **offline** and shipped as static JSON. They are
 **never** generated at runtime. This doc covers the whole pipeline: the curve
 that specs each level, the generator that builds it, the solver that proves it,

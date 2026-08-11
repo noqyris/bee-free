@@ -33,6 +33,16 @@ function plannerLoss(level: LevelData): number {
   return (generated.levels[level.id - 1] as { plannerLoss?: number })?.plannerLoss ?? 0
 }
 
+/**
+ * The planner floor the level was actually GENERATED against, as stamped into
+ * the JSON. Usually the curve's value; lower on boards `rescueWalls.mts`
+ * regenerated because a realistic player measurably could not clear them.
+ */
+function builtFloor(level: LevelData): number {
+  const stamped = (generated.levels[level.id - 1] as { plannerFloor?: number })?.plannerFloor
+  return stamped ?? slotFor(level.id).plannerFloor
+}
+
 const avg = (ls: readonly LevelData[]): number =>
   ls.reduce((a, l) => a + planningLoss(l), 0) / ls.length
 
@@ -135,17 +145,36 @@ describe('difficulty curve — schedule', () => {
     }
   })
 
-  it('every shipped level clears ITS OWN planner floor, not just the block average', () => {
+  it('every shipped level clears the floor it was BUILT to', () => {
     // The regression this exists for: `plannerFloor` is an INPUT to the offline
     // generator, so editing the curve without re-running `npm run gen:levels`
     // silently decouples config from content. A "round 5" edit once raised the
     // line (start L26 → L12, plateau 0.35 → 0.45) and was never generated —
     // 45 shipped levels sat below their own stated floor, and every existing
     // test passed because they all check chapter AVERAGES. This one does not.
-    const below = LEVELS.filter((l) => plannerLoss(l) < slotFor(l.id).plannerFloor - 1e-9).map(
-      (l) => `L${l.id}: loss ${plannerLoss(l).toFixed(2)} < floor ${slotFor(l.id).plannerFloor.toFixed(2)}`,
+    //
+    // The comparison is against the floor RECORDED ON THE LEVEL rather than the
+    // curve's, because `rescueWalls.mts` deliberately regenerates measured-
+    // unplayable boards at a softened floor and stamps the softer value. Those
+    // are relaxations we chose; the invariant that still has to hold is that a
+    // level is never softer than what it claims.
+    const below = LEVELS.filter((l) => plannerLoss(l) < builtFloor(l) - 1e-9).map(
+      (l) => `L${l.id}: loss ${plannerLoss(l).toFixed(2)} < floor ${builtFloor(l).toFixed(2)}`,
     )
     expect(below, `regenerate the levels or lower the curve:\n${below.join('\n')}`).toEqual([])
+  })
+
+  it('only ever RELAXES a level below the curve, never claims more than it built', () => {
+    const overclaiming = LEVELS.filter((l) => builtFloor(l) > slotFor(l.id).plannerFloor + 1e-9)
+    expect(overclaiming.map((l) => l.id)).toEqual([])
+  })
+
+  it('keeps the wall rescue a minority of the campaign', () => {
+    // Levels regenerated below the curve because a real player measurably could
+    // not clear them. A useful bound, not a target: if this ever approaches the
+    // whole campaign, the curve is wrong rather than the boards.
+    const relaxed = LEVELS.filter((l) => builtFloor(l) < slotFor(l.id).plannerFloor - 1e-9)
+    expect(relaxed.length).toBeLessThan(LEVEL_COUNT / 2)
   })
 
   it('schedules Sticky Hive specials every x5 level from L45, at safe coverage', () => {

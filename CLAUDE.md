@@ -45,6 +45,14 @@ many moves you had to spare).
   NEVER retrofit rotation onto the 300 campaign levels — free rotation
   provably collapses the fixed-direction ordering puzzle.
 
+**You cannot lose to a dead board.** A move that leaves the hive *sealed* —
+every remaining tap either bumps or is the queen escaping early — is rewound and
+**costs a move** (`BoardState.isSealed()` / `chargeMove()`,
+`GameScene.rescueIfSealed`). Measured session sims found 99% of losses were
+sealed boards with ~3.8 moves still in hand, which made every loss a dead end
+and the move budget an inert dial. Mistakes now cost moves, not the run. Full
+numbers in [docs/GAMEPLAY.md](docs/GAMEPLAY.md).
+
 Three occupant kinds ([src/systems/occupants.ts](src/systems/occupants.ts)):
 - **bee** — goal, tappable, blocks, flies.
 - **queen** — goal that must leave **LAST**; the level is lost the instant she
@@ -72,6 +80,7 @@ npm run dev         # play in browser (portrait viewport)
 npm run build       # tsc --noEmit + vite build → dist/ (Capacitor-ready)
 npm run typecheck   # strict TS, no emit
 npm run gen:levels  # regenerate all 300 levels → src/levels/levels.generated.json
+npm run gen:compass # regenerate the 50 Compass Hive levels (~2h)
 npm test            # vitest unit tests (see flakiness note below)
 npm run test:e2e    # Playwright playtests (drive window.__game)
 ```
