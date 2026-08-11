@@ -9,7 +9,7 @@ stale. Read this before assuming anything from `README.md` or `store/metadata.md
 | | |
 |---|---|
 | Version | **1.1** (`MARKETING_VERSION`) — 1.0 shipped; its ASC train is closed |
-| Build | **25** (`CURRENT_PROJECT_VERSION`) — bump before every upload |
+| Build | **27** (`CURRENT_PROJECT_VERSION`) — uploaded and IN_BETA_TESTING; bump before every upload |
 | Bundle id | `com.beefree.hiveescape` |
 | Team | `YMN45WC2QR` (Automatic signing) |
 | Device family | Universal (iPhone + iPad, `1,2`) |
@@ -17,6 +17,44 @@ stale. Read this before assuming anything from `README.md` or `store/metadata.md
 | App Store id | `6793947665` |
 
 ## What's built and working
+
+> **Addictiveness pass (Aug 12 2026, "test the gameplay, I want it addictive").**
+> The problem was not difficulty, it was the SHAPE of the losses. A session
+> simulator (`scripts/sessionSim.mts`) plays levels in order with a realistic
+> player and found: 99% of losses were the board sealing shut rather than the
+> budget running out, with ~3.8 unspent moves in hand and 2-3 bees stranded —
+> never one. A loss never said "I almost had it", it said "there is nothing left
+> to try". Consequences: the move budget was an inert dial (slack 1 → 4 moved
+> the win rate 32% → 33%) and stars had no gradient (play the exact optimum or
+> die).
+>
+> Fixed by the **sealed-hive rescue**: a move that leaves no live option is
+> rewound and charged a move. Writing the predicate the obvious way matched 0%
+> of real dead ends — classifying 95 of them showed **100%** are "workers
+> jammed, queen has a clear lane, taking it loses", i.e. **queen-last
+> manufactures every dead end in the game**.
+>
+> Then two surgical content passes, neither needing a full regeneration because
+> `minMoves` is recorded per level: `retuneBudgets.mts` granted up to +2 moves
+> to the 44 levels measuring under a 40% first-try win rate (a floor, not a
+> target — aiming at real targets measured out as trivial), and
+> `rescueWalls.mts` regenerated **105 boards a budget could not fix** at a
+> softened planner floor, each re-proved solvable within its own budget.
+>
+> Measured over all 300 levels, before → after:
+>
+> | | before | after |
+> |---|---|---|
+> | first-try win, ch. 8-12 | 19-28% | 45-55% |
+> | tries per level, back half | up to 18.4 | 1.8-2.1 |
+> | walls (4+ tries) | 90 | 5 |
+> | levels the bot never clears | 7 | 0 |
+> | losses that are dead boards | 99% | 0% |
+>
+> Same pass: bees face their own heading (which uncovered that flight pose had
+> been rotating them 90° off all along), a 4-phase wing sheet, an idle
+> wing-flutter so a resting board is never quite still, and the grounding shadow
+> lifted out of the sprite sheet so it no longer swings around with the body.
 
 > **Ship-prep pass (Aug 9 2026).** Two "written but never run" gaps closed and
 > the release blockers cleared:

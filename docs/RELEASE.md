@@ -9,7 +9,7 @@ current state in [STATUS.md](STATUS.md).
 
 | | |
 |---|---|
-| Version / build | **1.1 / 25** — uploaded Aug 9 2026 and `IN_BETA_TESTING`. Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
+| Version / build | **1.1 / 27** — uploaded Aug 12 2026 and `IN_BETA_TESTING`. Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
 | Bundle id | `com.beefree.hiveescape` |
 | Team | `YMN45WC2QR` (Automatic signing) |
 | Device family | Universal (`1,2`) |
@@ -162,7 +162,7 @@ same AuthKey_87V9QK9CTV.p8. Success = HTTP 204; the build flips to
 ### Gotchas hit in practice
 
 - **Bump the build number first.** ASC rejects a duplicate `CURRENT_PROJECT_VERSION`
-  outright. Currently **25** (uploaded). Note the local project file is not proof
+  outright. Currently **27** (uploaded). Note the local project file is not proof
   of what shipped: it read 24 while ASC's newest build was **23** — build 24 was
   bumped locally and never uploaded. **Ask ASC, not the repo**, what the last
   uploaded build was:
