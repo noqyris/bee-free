@@ -1,4 +1,5 @@
 import type { Axial, CellOccupant, GameStatus, LevelData, TapOutcome } from '../types'
+import { GATE_ANY } from '../types'
 import { axialKey, step } from './HexGrid'
 import { createOccupant } from './occupants'
 
@@ -32,12 +33,15 @@ export class BoardState {
   private queenViolated = false
   /** Compass mode: rotation is legal and every escape must pass a color gate. */
   private compassMode = false
+  /** Rush mode: blocked bees PARK instead of bumping; the rim is a wall. */
+  private rushMode = false
   /** Gate colors keyed `cellKey|dir` — the rim crossing they guard. */
   private gateMap = new Map<string, number>()
 
   constructor(level?: LevelData) {
     if (!level) return
     this.compassMode = level.compass === true
+    this.rushMode = level.rush === true
     for (const [q, r] of level.cells) this.cellSet.add(axialKey(q, r))
     for (const [q, r, dir, color] of level.gates ?? []) {
       const key = axialKey(q, r)
@@ -73,7 +77,10 @@ export class BoardState {
       this.occupants.set(key, occ)
       // Honey sits under every bee/queen from the start (walls-to-be). Hornets
       // are stone, not honey.
-      if (occ.isGoal()) this.honeySet.add(key)
+      // Rush Hive runs DRY: there, the bees are the traffic and honey would
+      // only add a second, slower blocking system on top of the one the mode
+      // exists to test. Ordering pressure has to come from the bees themselves.
+      if (occ.isGoal() && !this.rushMode) this.honeySet.add(key)
     }
   }
 
@@ -157,8 +164,15 @@ export class BoardState {
    */
   trace(occ: CellOccupant): TapOutcome {
     const path: Axial[] = []
-    let pos: Axial = { q: occ.q, r: occ.r }
+    const start: Axial = { q: occ.q, r: occ.r }
+    let pos: Axial = start
     let prev: Axial = pos
+    // Rush: stopping short is a MOVE (the bee parks where it stopped), not a
+    // bump. `prev` is the last cell it actually reached, so a bee already flush
+    // against its blocker yields prev === start — a zero-length slide, which is
+    // no move at all and is refused by `tap`.
+    const parkOrBlock = (blocker: Axial): TapOutcome =>
+      this.rushMode ? { kind: 'parked', path, at: { q: prev.q, r: prev.r } } : { kind: 'blocked', path, blocker }
     for (;;) {
       prev = pos
       pos = step(pos, occ.dir)
@@ -166,12 +180,14 @@ export class BoardState {
       if (!this.cellSet.has(key)) {
         // Compass rule: the rim is a wall except at a gate of the bee's color —
         // a wrong-colored crossing bounces exactly like a bump.
-        if (this.compassMode && !this.gateMatches(prev, occ.dir, occ.color))
-          return { kind: 'blocked', path, blocker: pos }
+        // Rush rule: the rim is a wall except at a universal exit; a bee that
+        // reaches a solid rim parks against it rather than bouncing home.
+        if ((this.compassMode || this.rushMode) && !this.gateMatches(prev, occ.dir, occ.color))
+          return parkOrBlock(pos)
         return { kind: 'escaped', path }
       }
       const blocker = this.occupants.get(key)
-      if (blocker?.blocksFlight()) return { kind: 'blocked', path, blocker: pos }
+      if (blocker?.blocksFlight()) return parkOrBlock(pos)
       // Honey catches the bee. Its own start cell is never re-checked (we step
       // first), so a bee sitting in honey flies off it normally.
       if (this.stickyKey(key)) return { kind: 'stuck', path, at: { q: pos.q, r: pos.r } }
@@ -181,7 +197,10 @@ export class BoardState {
 
   private gateMatches(lastCell: Axial, dir: number, color: number | undefined): boolean {
     const gate = this.gateMap.get(`${axialKey(lastCell.q, lastCell.r)}|${dir}`)
-    return gate !== undefined && gate === color
+    if (gate === undefined) return false
+    // GATE_ANY is Rush Hive's universal exit: the hive has a mouth, not a
+    // colour lock. Compass gates keep matching on colour.
+    return gate === GATE_ANY || gate === color
   }
 
   /** Whether this board plays under Compass rules (rotation + color gates). */
@@ -222,6 +241,13 @@ export class BoardState {
     const occ = this.occupantAt(q, r)
     if (!occ || !occ.isTappable()) return undefined
     const outcome = this.trace(occ)
+    // Rush: a bee flush against its blocker has nowhere to slide. Refusing the
+    // tap (rather than charging a move for nothing) is what keeps the mode a
+    // planning puzzle instead of a poking one — an illegal move in Rush Hour is
+    // simply not offered.
+    if (outcome.kind === 'parked' && outcome.at.q === occ.q && outcome.at.r === occ.r) {
+      return undefined
+    }
     this.movesUsed++
     if (outcome.kind === 'escaped') {
       this.occupants.delete(axialKey(q, r))
@@ -237,11 +263,24 @@ export class BoardState {
       this.occupants.set(axialKey(occ.q, occ.r), occ)
       this.honeySet.delete(axialKey(occ.q, occ.r))
       this.collected++
+    } else if (outcome.kind === 'parked') {
+      // Slide to the last cell reached. No honey is collected: the bee stopped
+      // against traffic, it did not land in a pool.
+      this.occupants.delete(axialKey(q, r))
+      occ.q = outcome.at.q
+      occ.r = outcome.at.r
+      this.occupants.set(axialKey(occ.q, occ.r), occ)
     }
     // Permanent honey is smeared over every cell the bee actually flew over — a
     // bump counts, because the bee still made the trip before bouncing back.
-    this.layTrail(outcome.path)
+    // Rush Hive lays none (see the constructor): it is a dry board by design.
+    if (!this.rushMode) this.layTrail(outcome.path)
     return outcome
+  }
+
+  /** Whether this board plays under Rush Hive rules (park-on-block, walled rim). */
+  get isRush(): boolean {
+    return this.rushMode
   }
 
   private layTrail(path: ReadonlyArray<Axial>): void {
@@ -333,6 +372,7 @@ export class BoardState {
     copy.movesUsed = this.movesUsed
     copy.queenViolated = this.queenViolated
     copy.compassMode = this.compassMode
+    copy.rushMode = this.rushMode
     copy.gateMap = this.gateMap // immutable after construction — safe to share
     for (const [key, occ] of this.occupants) copy.occupants.set(key, occ.clone())
     return copy

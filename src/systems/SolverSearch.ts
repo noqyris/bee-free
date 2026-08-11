@@ -84,6 +84,13 @@ export function searchMinMoves(start: BoardState, maxMoves: number, cap = 300_00
       .map((o) => ({ occ: o, out: state.trace(o) }))
       // A bump burns a move and smears more honey — never part of a best line.
       .filter((m) => m.out.kind !== 'blocked')
+      // Rush: a bee flush against its blocker yields a zero-length park, which
+      // `tap` refuses. Left in, the search would count a move that never
+      // happened and explore a child identical to its parent.
+      .filter(
+        (m) =>
+          m.out.kind !== 'parked' || m.out.at.q !== m.occ.q || m.out.at.r !== m.occ.r,
+      )
       .sort((a, b) => (a.out.kind === 'escaped' ? 0 : 1) - (b.out.kind === 'escaped' ? 0 : 1))
 
     for (const move of moves) {
@@ -177,6 +184,9 @@ export function smartGreedyLossRate(start: BoardState, trials: number, seedBase:
         .filter((o) => o.isTappable())
         .map((o) => ({ o, out: b.trace(o) }))
         .filter((m) => m.out.kind !== 'blocked')
+        // Rush: a zero-length park is refused by `tap`, so offering it to the
+        // bot would let it "play" a move that changes nothing and stall out.
+        .filter((m) => m.out.kind !== 'parked' || m.out.at.q !== m.o.q || m.out.at.r !== m.o.r)
         .filter((m) => !(m.o.kind === 'queen' && m.out.kind === 'escaped' && goalsLeft > 1))
       if (moves.length === 0) break // stranded
 
@@ -340,6 +350,9 @@ export function plannerLossRate(start: BoardState, trials: number, seedBase: num
         .filter((o) => o.isTappable())
         .map((o) => ({ o, out: b.trace(o) }))
         .filter((m) => m.out.kind !== 'blocked')
+        // Rush: a zero-length park is refused by `tap`, so offering it to the
+        // bot would let it "play" a move that changes nothing and stall out.
+        .filter((m) => m.out.kind !== 'parked' || m.out.at.q !== m.o.q || m.out.at.r !== m.o.r)
         .filter((m) => !(m.o.kind === 'queen' && m.out.kind === 'escaped' && goalsLeft > 1))
       if (cands.length === 0) break
       const scored = cands

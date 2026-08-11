@@ -17,6 +17,10 @@ import Phaser from 'phaser'
  */
 
 /** Colours sampled from `public/logo.png` — the single source of art truth. */
+/** Wing-flap phases baked into the bee sheet: 0 = folded rest, 1 = top of beat. */
+const BEE_WING_PHASE = [0, 0.45, 1, 0.45] as const
+const BEE_FRAMES = BEE_WING_PHASE.length
+
 const LOGO = {
   /** The mark's warm near-black: outlines, stripes, head, stinger. */
   ink: 0x2a1d12,
@@ -69,11 +73,14 @@ export class PreloadScene extends Phaser.Scene {
     if (this.anims.exists(`${key}-fly`)) return
     this.anims.create({
       key: `${key}-fly`,
+      // Frame 0 is the resting pose — a flying bee never shows it.
       frames: [
-        { key, frame: 0 },
         { key, frame: 1 },
+        { key, frame: 2 },
+        { key, frame: 3 },
+        { key, frame: 2 },
       ],
-      frameRate: 18,
+      frameRate: 24,
       repeat: -1,
     })
   }
@@ -121,39 +128,64 @@ export class PreloadScene extends Phaser.Scene {
    */
   private makeBeeSheet(key: string, light: number, dark: number): void {
     const g = this.make.graphics({}, false)
-    this.drawBee(g, 0, light, dark, false) // frame 0 — wing at rest
-    this.drawBee(g, 128, light, dark, true) // frame 1 — wing up (mid-flap)
-    g.generateTexture(key, 256, 128)
+    // Four wing phases instead of two. At 18fps a 2-frame flap strobes; four
+    // phases (rest → mid → top → mid) read as a real beat and let the flight
+    // loop skip the rest frame entirely.
+    for (let f = 0; f < BEE_FRAMES; f++) this.drawBee(g, f * 128, light, dark, BEE_WING_PHASE[f])
+    g.generateTexture(key, 128 * BEE_FRAMES, 128)
     g.destroy()
-    // Split the 256×128 sheet into two 128×128 frames the flap anim cycles through.
     const tex = this.textures.get(key)
-    tex.add(0, 0, 0, 0, 128, 128)
-    tex.add(1, 0, 128, 0, 128, 128)
+    for (let f = 0; f < BEE_FRAMES; f++) tex.add(f, 0, f * 128, 0, 128, 128)
   }
 
-  /** Draw one bee into `g`, offset by `ox`; `wingUp` raises + spreads the wing. */
+  /**
+   * Draw one bee into `g`, offset by `ox`. `wing` is the flap phase (0 folded,
+   * 1 top of the beat).
+   *
+   * Built back-to-front so the silhouette stays clean: shadow, far wing, legs,
+   * stinger, body (outline → gradient → belly shade → rim light), stripes,
+   * near wing, head, antennae, eyes. The far wing and the belly shade are what
+   * turn the old flat sticker into something with a near and a far side.
+   */
   private drawBee(
     g: Phaser.GameObjects.Graphics,
     ox: number,
     light: number,
     dark: number,
-    wingUp: boolean,
+    wing: number,
   ): void {
     const ink = LOGO.ink
     g.save()
     g.translateCanvas(ox, 0)
 
-    // Soft grounding shadow, drawn before the tilt so it stays level.
+    // Soft grounding shadow, drawn before the tilt so it stays level. It
+    // tightens as the wings lift — the bee reads as leaving the ground.
     g.fillStyle(0x000000, 0.16)
-    g.fillEllipse(62, 116, 74, 12)
+    g.fillEllipse(62, 116, 74 - wing * 16, 12 - wing * 3)
 
     // The logo's mark sits at a slight nose-up tilt; everything below is drawn
-    // in that local frame, centred on the body.
-    g.translateCanvas(64, 64)
-    g.rotateCanvas(Phaser.Math.DegToRad(-8))
+    // in that local frame, centred on the body. The nose lifts with the beat.
+    g.translateCanvas(64, 64 - wing * 3)
+    g.rotateCanvas(Phaser.Math.DegToRad(-8 - wing * 4))
 
-    // WING — pale, behind the body; raised and swept back on the flap frame.
-    this.beeWing(g, wingUp)
+    // FAR WING — behind everything, smaller and dimmer than the near one. Two
+    // wings at slightly different phases is most of what sells the flap.
+    this.beeWing(g, wing, true)
+
+    // LEGS — three short ink hooks tucked under the belly. Kept SHORT and thin
+    // on purpose: at cell size long legs read as scratches around the bee, not
+    // as anatomy. They exist to break the decal-flat silhouette, nothing more.
+    g.lineStyle(3.5, ink, 1)
+    for (const [lx, ly, tx, ty] of [
+      [-22, 27, -28, 36],
+      [-2, 30, -4, 39],
+      [18, 27, 22, 36],
+    ]) {
+      g.beginPath()
+      g.moveTo(lx, ly)
+      g.lineTo(tx, ty)
+      g.strokePath()
+    }
 
     // STINGER — a sharp ink wedge off the tail, drawn under the body so the
     // body's outline swallows its base and only the point shows.
@@ -165,12 +197,20 @@ export class PreloadScene extends Phaser.Scene {
     // top-lit falloff the logo has.
     g.fillStyle(ink, 1)
     g.fillEllipse(-8, 4, 88, 64)
-    const steps = 5
+    const steps = 7
     for (let i = 0; i < steps; i++) {
       const t = i / (steps - 1)
       g.fillStyle(this.mix(dark, light, t), 1)
       g.fillEllipse(-8, 4 - t * 9, 80 - t * 6, 56 - t * 18)
     }
+    // BELLY SHADE — a warm dark crescent along the underside, so the body is a
+    // rounded volume rather than a flat gradient.
+    g.fillStyle(this.mix(dark, ink, 0.28), 0.5)
+    g.fillEllipse(-8, 22, 66, 20)
+    // RIM LIGHT — a thin bright sliver on the top-back edge, the single cheapest
+    // trick for making a flat vector shape look lit.
+    g.fillStyle(0xfff6d0, 0.75)
+    g.fillEllipse(-16, -20, 46, 9)
 
     // Two heavy slanted stripes, inscribed in the body ellipse so their ends
     // stop just inside the outline (no clipping needed).
@@ -178,9 +218,27 @@ export class PreloadScene extends Phaser.Scene {
     this.beeStripe(g, -8, 4, 40, 28, -12, 12)
     this.beeStripe(g, -8, 4, 40, 28, 7, 12)
 
+    // NEAR WING — over the body, leading the far wing by a fraction of a beat.
+    this.beeWing(g, Math.min(1, wing * 1.15), false)
+
     // HEAD — a solid ink circle overlapping the body's front.
     g.fillStyle(ink, 1)
     g.fillCircle(36, -12, 24)
+
+    // ANTENNAE — two short ink whips with club tips, springing back as the bee
+    // lifts. Same restraint as the legs: readable curve, no wire sculpture.
+    g.lineStyle(3.5, ink, 1)
+    for (const [sx, sy, cx, cy] of [
+      [40, -30, 52 - wing * 5, -44 - wing * 3],
+      [31, -33, 37 - wing * 4, -48 - wing * 3],
+    ]) {
+      g.beginPath()
+      g.moveTo(sx, sy)
+      g.lineTo(cx, cy)
+      g.strokePath()
+      g.fillStyle(ink, 1)
+      g.fillCircle(cx, cy, 4)
+    }
 
     // EYES — two white circles set diagonally, each with a pupil pushed
     // up-and-forward. Scaled up from the logo's proportions to stay readable
@@ -191,12 +249,15 @@ export class PreloadScene extends Phaser.Scene {
     g.restore()
   }
 
-  /** One white eye with an ink pupil looking up-and-forward. */
+  /** One white eye with an ink pupil looking up-and-forward, plus a glint. */
   private beeEye(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
     g.fillStyle(0xffffff, 1)
     g.fillCircle(cx, cy, r)
     g.fillStyle(LOGO.ink, 1)
     g.fillCircle(cx + r * 0.34, cy - r * 0.27, r * 0.42)
+    // Specular dot on the pupil — what makes eyes look wet instead of printed.
+    g.fillStyle(0xffffff, 0.9)
+    g.fillCircle(cx + r * 0.14, cy - r * 0.5, r * 0.2)
   }
 
   /**
@@ -225,17 +286,31 @@ export class PreloadScene extends Phaser.Scene {
     g.restore()
   }
 
-  /** The pale logo wing behind the body; `up` sweeps it high for the flap frame. */
-  private beeWing(g: Phaser.GameObjects.Graphics, up: boolean): void {
+  /**
+   * One wing. `phase` 0 = folded along the back, 1 = top of the beat. `far`
+   * draws the off-side wing: smaller, darker and lagging, which is what gives
+   * the pair depth instead of one flat paddle.
+   */
+  private beeWing(g: Phaser.GameObjects.Graphics, phase: number, far: boolean): void {
+    const lift = far ? phase * 0.82 : phase
+    const scale = far ? 0.8 : 0.92
     g.save()
-    g.translateCanvas(up ? -20 : -15, up ? -34 : -25)
-    g.rotateCanvas(Phaser.Math.DegToRad(up ? -44 : -22))
-    g.fillStyle(LOGO.ink, 1)
-    g.fillEllipse(0, 0, 36, 54)
-    g.fillStyle(LOGO.wing, 1)
-    g.fillEllipse(0, 0, 29, 47)
-    g.fillStyle(0xffffff, 0.65)
-    g.fillEllipse(-4, -10, 12, 20)
+    // Sits on the SHOULDER and sweeps back, not across the middle. The first
+    // pass parked it over the body and the stripes vanished behind a pale blob
+    // — the stripes are the bee's read at cell size, so the wing gets out of
+    // their way and stays translucent.
+    g.translateCanvas(-24 - lift * 6 - (far ? 5 : 0), -32 - lift * 10 - (far ? 4 : 0))
+    g.rotateCanvas(Phaser.Math.DegToRad(-30 - lift * 24))
+    g.scaleCanvas(scale, scale)
+    // Ink edge, pale membrane, then a bright leading streak. The whole wing
+    // fades as it rises — a wing at speed is half-transparent, not a solid.
+    const a = far ? 0.45 : 0.82
+    g.fillStyle(LOGO.ink, a * (1 - lift * 0.35))
+    g.fillEllipse(0, 0, 32, 48)
+    g.fillStyle(LOGO.wing, a * (1 - lift * 0.3))
+    g.fillEllipse(0, 0, 26, 42)
+    g.fillStyle(0xffffff, a * 0.6 * (1 - lift * 0.25))
+    g.fillEllipse(-3, -9, 11, 18)
     g.restore()
   }
 

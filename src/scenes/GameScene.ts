@@ -10,7 +10,7 @@ import {
 } from '../systems/HexGrid'
 import { getLevel, LEVEL_COUNT, chapterOf } from '../levels'
 import { getCompassLevel, COMPASS_COUNT } from '../levels/compass'
-import type { Axial, CellOccupant, LevelData, TapOutcome } from '../types'
+import type { Axial, CellOccupant, Direction, LevelData, TapOutcome } from '../types'
 import { GAME_WIDTH, GAME_HEIGHT, colors, layout } from '../config/gameConfig'
 import { juice } from '../config/juiceConfig'
 import { themeForChapter, type ChapterTheme } from '../config/theme'
@@ -65,6 +65,7 @@ function hexPoints(cx: number, cy: number, radius: number): Phaser.Types.Math.Ve
 type EscapedOutcome = Extract<TapOutcome, { kind: 'escaped' }>
 type BlockedOutcome = Extract<TapOutcome, { kind: 'blocked' }>
 type StuckOutcome = Extract<TapOutcome, { kind: 'stuck' }>
+type ParkedOutcome = Extract<TapOutcome, { kind: 'parked' }>
 
 export class GameScene extends Phaser.Scene {
   private board!: BoardState
@@ -383,19 +384,23 @@ export class GameScene extends Phaser.Scene {
         return
       }
 
-      // At REST the body is upright (frame 0 of the 2-frame flap sheet); a separate
-      // arrow shows where it will fly. It only turns to face its direction — and
-      // flaps — once it is actually flying.
+      // The bee FACES the way it will fly, at rest and not just in flight. In a
+      // puzzle whose whole subject is direction, the piece has to carry its own
+      // axis — reading a detached arrow to learn where a bee points is work the
+      // art should be doing. (It also let the arrow move in off the neighbours.)
       const sprite = this.add.sprite(x, y, occ.kind === 'queen' ? 'beeQueen' : 'bee', 0)
       sprite.setScale(0)
       sprite.setDepth(occ.kind === 'queen' ? 12 : 10)
-      sprite.setData('baseRot', 0)
+      this.faceBee(sprite, occ.dir)
 
       const angle = directionAngle(occ.dir)
-      // Pushed out past the wide logo bee (still well inside the cell, whose
-      // narrowest half-span is 0.87×cellSize) so the aim arrow never lands on
-      // the body it belongs to.
-      const off = this.cellSize * 0.76
+      // The chevron used to be the ONLY direction signal, which is why it was
+      // flung 0.76×cellSize out — far enough to clear the wide body, and far
+      // enough to spill onto neighbouring cells. The body carries the heading
+      // now, so the chevron survives only where it also encodes something else:
+      // Compass gate colour. Everywhere else the board loses eight floating
+      // triangles and reads as bees instead of bees-plus-signage.
+      const off = this.cellSize * 0.7
       const arrow = this.add
         .image(x + Math.cos(angle) * off, y + Math.sin(angle) * off, 'arrow')
         .setRotation(angle)
@@ -1247,6 +1252,12 @@ export class GameScene extends Phaser.Scene {
       this.comboCount = 0
       feedback.stuck()
       this.animateStuck(occ, sprite, outcome)
+    } else if (outcome.kind === 'parked') {
+      // Rush Hive: the bee travelled and stopped. It is a move that changed the
+      // board, not a failure, so it keeps the flight read — no bump buzz.
+      this.comboCount = 0
+      feedback.stuck()
+      this.animatePark(occ, sprite, outcome)
     } else {
       this.comboCount = 0
       feedback.bump()
@@ -1279,6 +1290,10 @@ export class GameScene extends Phaser.Scene {
         })
       }
       sprite.setData('arrowAngle', angle)
+      // The body carries the heading now, so a rotation has to turn the bee
+      // itself — otherwise the chevron swings and the bee keeps facing the old
+      // way. startIdle (next line) restores the pose from faceRot.
+      sprite.setData('faceRot', angle + Math.PI / 2)
       this.startIdle(sprite)
     }
     this.drawPreview(pending.occ)
@@ -1392,9 +1407,24 @@ export class GameScene extends Phaser.Scene {
   private beginFlightPose(sprite: Phaser.GameObjects.Sprite, occ: CellOccupant): void {
     sprite.play(`${sprite.texture.key}-fly`, true)
     // Snap to face the flight direction immediately (not a gradual turn): escapes
-    // are quick, and a round bee mid-turn reads as "never turned". Instant + flap
-    // makes "it's flying THAT way" unmistakable for the whole (brief) flight.
-    sprite.setRotation(directionAngle(occ.dir) + Math.PI / 2)
+    // are quick, and a round bee mid-turn reads as "never turned".
+    this.faceBee(sprite, occ.dir)
+  }
+
+  /**
+   * Point a bee along `dir`. The body art faces EAST and `directionAngle` gives
+   * 0 for east, so the rotation is the angle itself — but a bee aimed westward
+   * would then be flying belly-up, so it is MIRRORED instead of turned past
+   * vertical. That is the standard side-view trick and the reason this is one
+   * helper rather than a `setRotation` at each call site.
+   */
+  private faceBee(sprite: Phaser.GameObjects.Sprite, dir: Direction): void {
+    const a = directionAngle(dir)
+    const leftward = Math.cos(a) < -1e-6
+    sprite.setRotation(a)
+    sprite.setFlipY(leftward)
+    sprite.setData('faceRot', a)
+    sprite.setData('faceFlip', leftward)
   }
 
   private animateEscape(
@@ -1572,6 +1602,45 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * Rush Hive parking: the bee slides down its lane and thumps to a stop
+   * against whatever blocked it. Deliberately reads like arrival rather than
+   * rejection — the board changed, and the bee is now somebody else's wall.
+   * No honey pop: nothing was collected.
+   */
+  private animatePark(occ: CellOccupant, sprite: Phaser.GameObjects.Sprite, outcome: ParkedOutcome): void {
+    const cells = outcome.path.length
+    const duration = Math.max(juice.flight.minDurationMs, cells * juice.flight.msPerCell)
+    const target = this.cellToWorld(outcome.at.q, outcome.at.r)
+
+    sprite.setDepth(100)
+    this.tweens.add({
+      targets: sprite,
+      x: target.x,
+      y: target.y,
+      duration,
+      // Ease OUT, not in: a car rolling to a stop, not a dive into honey.
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.dustEmitter.explode(juice.bump.dust.count, target.x, target.y)
+        this.tweens.add({
+          targets: sprite,
+          scaleX: this.beeScale * 1.18,
+          scaleY: this.beeScale * 0.82,
+          duration: juice.bump.squashMs,
+          yoyo: true,
+          ease: 'Quad.easeOut',
+          onComplete: () => {
+            sprite.setDepth(occ.kind === 'queen' ? 12 : 10)
+            sprite.setScale(this.beeScale)
+            this.startIdle(sprite)
+            this.resolveAfterAction(outcome.path)
+          },
+        })
+      },
+    })
+  }
+
+  /**
    * Collection celebration: "+1" floats up AND a droplet flies a bezier arc
    * into the honey chip, which pops — the reward is SEEN arriving.
    */
@@ -1659,7 +1728,10 @@ export class GameScene extends Phaser.Scene {
     sprite.stop()
     sprite.setFrame(0)
     sprite.setScale(this.beeScale)
-    sprite.setRotation(0)
+    // Back to the bee's OWN heading, not to upright — the resting pose carries
+    // the direction now, so snapping to 0 would erase it after every flight.
+    sprite.setRotation((sprite.getData('faceRot') as number | undefined) ?? 0)
+    sprite.setFlipY((sprite.getData('faceFlip') as boolean | undefined) ?? false)
     this.tweens.add({
       targets: sprite,
       scale: this.beeScale * juice.idle.breatheScale,
@@ -1669,7 +1741,12 @@ export class GameScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.easeInOut',
     })
-    // Reveal the flight-direction arrow while the bee is at rest and tappable.
+    // Reveal the flight-direction chevron while the bee is at rest and tappable.
+    // Tried and reverted: hiding it once the BODY faces its heading. It reads
+    // fine in isolation, but the six headings are 60° apart and leftward bees
+    // are mirrored, so E/NE/SE became genuinely hard to tell apart on a packed
+    // board. The body's heading is worth having as reinforcement; it is not
+    // worth having INSTEAD.
     const arrow = sprite.getData('arrow') as Phaser.GameObjects.Image | undefined
     if (arrow) arrow.setVisible(true).setScale((this.cellSize / 64) * 0.9)
   }
