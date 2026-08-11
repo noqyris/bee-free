@@ -70,6 +70,15 @@ export const juice = {
     wiggleRad: 0.05,
     wiggleMs: 1300,
     wiggleJitterMs: 400,
+    /**
+     * Occasional single wing-flutter while resting. A board of eight bees that
+     * only scale-breathe reads as a board of stickers; one bee twitching a wing
+     * every few seconds reads as a hive. Staggered per bee (see the jitter) so
+     * they never pulse in unison, which would look mechanical instead of alive.
+     */
+    flutterEveryMs: 2600,
+    flutterJitterMs: 2400,
+    flutterFrameMs: 70,
   },
   /** Honey blobs appearing along a flown path, rippling in the bee's wake. */
   honey: {

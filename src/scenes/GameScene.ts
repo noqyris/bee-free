@@ -1800,9 +1800,51 @@ export class GameScene extends Phaser.Scene {
     // worth having INSTEAD.
     const arrow = sprite.getData('arrow') as Phaser.GameObjects.Image | undefined
     if (arrow) arrow.setVisible(true).setScale((this.cellSize / 64) * 0.9)
+    this.startIdleFlutter(sprite)
+  }
+
+  /**
+   * A resting bee twitches a wing every few seconds. Eight bees that only
+   * scale-breathe read as eight stickers; one wing moving somewhere on the
+   * board reads as a hive that is alive and waiting for you. The interval is
+   * jittered per bee so they never flutter in unison, which would look
+   * mechanical — the point is that the board is never quite still.
+   */
+  private startIdleFlutter(sprite: Phaser.GameObjects.Sprite): void {
+    this.stopIdleFlutter(sprite)
+    const schedule = (): void => {
+      if (!sprite.active) return
+      const timer = this.time.delayedCall(
+        juice.idle.flutterEveryMs + Math.random() * juice.idle.flutterJitterMs,
+        () => {
+          // Only while genuinely at rest: a bee mid-flight owns its own frames.
+          if (!sprite.active || sprite.anims.isPlaying) return
+          const frames = [1, 2, 1, 0]
+          frames.forEach((f, i) => {
+            this.time.delayedCall(i * juice.idle.flutterFrameMs, () => {
+              if (sprite.active && !sprite.anims.isPlaying) sprite.setFrame(f)
+            })
+          })
+          schedule()
+        },
+      )
+      sprite.setData('flutterTimer', timer)
+    }
+    schedule()
+  }
+
+  private stopIdleFlutter(sprite: Phaser.GameObjects.Sprite): void {
+    const timer = sprite.getData('flutterTimer') as Phaser.Time.TimerEvent | undefined
+    if (timer) {
+      timer.remove(false)
+      sprite.setData('flutterTimer', undefined)
+    }
   }
 
   private stopIdle(sprite: Phaser.GameObjects.Sprite): void {
+    // The resting wing-flutter schedules itself forward; kill it before the bee
+    // commits to an action or a stray frame lands mid-flight.
+    this.stopIdleFlutter(sprite)
     // A tap can land before the staggered spawn pop has even started —
     // cancel the pending timer so it cannot re-animate the sprite mid-action.
     const spawnTimer = sprite.getData('spawnTimer') as Phaser.Time.TimerEvent | undefined
