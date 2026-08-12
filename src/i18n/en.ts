@@ -14,7 +14,7 @@ export const en = {
   'settings.sound': 'Sound',
   'settings.vibe': 'Buzz',
   'home.howTitle': 'How to play',
-  'home.how': 'Tap a bee to fly it out. It smears honey on every cell it crosses. Fly into honey and you stop — but you COLLECT that honey (+1). The ORDER you free them is the whole puzzle.',
+  'home.how': 'The hive is sealed — bees leave only through its doors. TAP a bee to turn it, HOLD to send it flying. Honey stops a flight dead (and pays +1). Work out who goes, which way, and in what order.',
   'hud.level': 'Level {n}',
   'hud.moves': 'MOVES',
   'hud.honey': 'Honey: {n}',

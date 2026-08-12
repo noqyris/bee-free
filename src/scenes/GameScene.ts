@@ -122,8 +122,10 @@ export class GameScene extends Phaser.Scene {
   private wasDoomed = false
   /** The three mini star pips under the moves pill (3-star transparency). */
   private starPips: Phaser.GameObjects.Star[] = []
-  /** Compass Hive mode: rotation input + colored gates, its own ladder. */
+  /** True when the BOARD plays by the sealed-rim rules (turning, doors). */
   private compassMode = false
+  /** True only when the separate Compass ladder was loaded, not the campaign. */
+  private compassLadder = false
 
   constructor() {
     super('Game')
@@ -133,6 +135,7 @@ export class GameScene extends Phaser.Scene {
     // Read the rules off the LEVEL, not off how the scene was launched. The
     // campaign is moving onto the sealed-rim rules level by level, so a board
     // decides for itself; `mode` only still picks which ladder to load.
+    this.compassLadder = data.mode === 'compass'
     this.compassMode = data.mode === 'compass'
     const max = this.compassMode ? COMPASS_COUNT - 1 : LEVEL_COUNT - 1
     this.levelIndex = Phaser.Math.Clamp(data.levelIndex ?? 0, 0, max)
@@ -520,10 +523,12 @@ export class GameScene extends Phaser.Scene {
     // rotate-then-fly input is new even to a campaign veteran.
     if (this.compassMode) {
       if (id <= 3) key = 'compass.coach'
-      // Colour matching is a SECOND lesson, taught on the levels that first
-      // ship coloured doors rather than up front — see the note in en.ts.
-      else if (id >= 15 && id <= 17 && (this.level.gates ?? []).some((g) => g[3] !== GATE_ANY))
-        key = 'compass.coachColor'
+      // Colour matching is a SECOND lesson, and it is taught on the levels that
+      // FIRST ship coloured doors rather than at a hardcoded id — the campaign
+      // introduces them at a different point than the old compass ladder did,
+      // and a lesson pinned to an id silently teaches the wrong level the day
+      // the curve moves.
+      else if (this.isFirstColouredLevels(id)) key = 'compass.coachColor'
     } else if (id === 1) key = 'coach.tap'
     else if (id <= 3) key = 'coach.trail'
     else if (id === 8 || id === 20 || id === 70) key = 'coach.trailDry'
@@ -1377,6 +1382,28 @@ export class GameScene extends Phaser.Scene {
       feedback.bump()
       this.animateBump(occ, sprite, outcome)
     }
+  }
+
+
+  /**
+   * Is this one of the first few levels to carry COLOURED doors? Answered from
+   * the ladder itself, so the colour lesson lands wherever the curve happens to
+   * introduce matching.
+   */
+  private isFirstColouredLevels(id: number): boolean {
+    const coloured = (l: LevelData | undefined): boolean =>
+      !!l && (l.gates ?? []).some((g) => g[3] !== GATE_ANY)
+    if (!coloured(this.level)) return false
+    const at = (levelId: number): LevelData | undefined => {
+      const idx = levelId - 1
+      if (idx < 0) return undefined
+      return this.compassLadder ? getCompassLevel(idx) : getLevel(idx)
+    }
+    // Within three levels of the first coloured one.
+    for (let back = 1; back <= 3; back++) {
+      if (!coloured(at(id - back))) return true
+    }
+    return false
   }
 
   /**
