@@ -9,7 +9,7 @@ current state in [STATUS.md](STATUS.md).
 
 | | |
 |---|---|
-| Version / build | **1.1 / 30** — uploaded Aug 12 2026 and `IN_BETA_TESTING`. Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
+| Version / build | **1.1 / 31** — uploaded Aug 12 2026 and `IN_BETA_TESTING`. Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
 | Bundle id | `com.beefree.hiveescape` |
 | Team | `YMN45WC2QR` (Automatic signing) |
 | Device family | Universal (`1,2`) |
@@ -23,6 +23,14 @@ Two flags apply to the native build too (unlike `import.meta.env.DEV`). Both are
 | File | Flag | Must be | Currently |
 |---|---|---|---|
 | [src/config/devConfig.ts](../src/config/devConfig.ts) | `DEV_UNLOCK_ALL_LEVELS` | `false` | `false` ✅ |
+
+> **Level unlocking no longer needs a release-day flip.** TestFlight/sandbox
+> builds unlock the whole campaign and App Store builds progress normally, read
+> from the StoreKit environment at boot (`SaveManager.setTestFlightUnlock`,
+> called from `BootScene`) — the same one-binary trick as the ad units. The
+> default is LOCKED, so a failed check or a web build never hands out 300
+> levels. `DEV_UNLOCK_ALL_LEVELS` stays as a local override and must stay
+> `false`.
 | [src/config/monetization.ts](../src/config/monetization.ts) | `USE_TEST_ADS` | `false` | `false` ✅ |
 
 `DEV_UNLOCK_ALL_LEVELS` makes every level playable regardless of progress.
