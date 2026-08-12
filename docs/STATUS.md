@@ -9,7 +9,7 @@ stale. Read this before assuming anything from `README.md` or `store/metadata.md
 | | |
 |---|---|
 | Version | **1.1** (`MARKETING_VERSION`) — 1.0 shipped; its ASC train is closed |
-| Build | **28** (`CURRENT_PROJECT_VERSION`) — uploaded and IN_BETA_TESTING; bump before every upload |
+| Build | **29** (`CURRENT_PROJECT_VERSION`) — uploaded and IN_BETA_TESTING; bump before every upload |
 | Bundle id | `com.beefree.hiveescape` |
 | Team | `YMN45WC2QR` (Automatic signing) |
 | Device family | Universal (iPhone + iPad, `1,2`) |

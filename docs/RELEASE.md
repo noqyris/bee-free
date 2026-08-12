@@ -9,7 +9,7 @@ current state in [STATUS.md](STATUS.md).
 
 | | |
 |---|---|
-| Version / build | **1.1 / 28** — uploaded Aug 12 2026 and `IN_BETA_TESTING`. Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
+| Version / build | **1.1 / 29** — uploaded Aug 12 2026 and `IN_BETA_TESTING`. Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
 | Bundle id | `com.beefree.hiveescape` |
 | Team | `YMN45WC2QR` (Automatic signing) |
 | Device family | Universal (`1,2`) |

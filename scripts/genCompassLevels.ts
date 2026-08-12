@@ -286,7 +286,14 @@ if (failedIds.length > 0) {
 }
 const levels = results.flatMap((r) => r.levels).sort((a, b) => a.id - b.id)
 
-writeFileSync(OUT, JSON.stringify({ schema: 1, count: levels.length, levels }) + '\n')
+// `progression` stamps WHICH design the data was built to, so a test can tell
+// the exits-first ladder from the older colours-at-L1 one. Code can run ahead
+// of data (it did: a rewritten generator does nothing until it is re-run), and
+// a marker in the file is the only thing that can prove which is on disk.
+writeFileSync(
+  OUT,
+  JSON.stringify({ schema: 1, progression: 'exits-first', count: levels.length, levels }) + '\n',
+)
 const ls = levels
 console.log(
   `Generated ${levels.length} compass levels in ${((Date.now() - t0) / 1000).toFixed(0)}s → ${OUT}`,
