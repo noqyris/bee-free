@@ -54,6 +54,19 @@ interface BeePalette {
   headDeep: string
   /** "r,g,b" for the wing membrane and its soft glow. */
   wing: string
+  /**
+   * Optional stripe colour, for matching a bee to its exit.
+   *
+   * The obvious way to colour-code a bee is `sprite.setTint`, and it is wrong:
+   * tint MULTIPLIES, so a saturated gold body under a blue tint goes muddy
+   * green — reproduced under WebGL. Recolouring the STRIPES instead keeps the
+   * logo's gold body intact and puts the colour exactly where the eye already
+   * looks. Three stops so the stripe keeps the same top-lit falloff the ink
+   * ones have, rather than turning into a flat band.
+   */
+  stripeTop?: string
+  stripeMid?: string
+  stripeDeep?: string
 }
 
 /** The logo's gold, as a lit volume rather than three flat swatches. */
@@ -100,6 +113,21 @@ const BEE_QUEEN: BeePalette = {
   wing: '250,225,240',
 }
 
+/**
+ * One palette per exit colour, worn on the stripes. Indices line up with the
+ * gate colours the generator emits (0,1,2); an uncoloured ladder never asks for
+ * these and the plain gold `bee` sheet is used instead.
+ */
+const BEE_GATE_PALETTES: readonly BeePalette[] = [
+  { ...BEE_WORKER, stripeTop: '#7fd8ff', stripeMid: '#2196d6', stripeDeep: '#12557f' },
+  { ...BEE_WORKER, stripeTop: '#ff9fd0', stripeMid: '#e0459a', stripeDeep: '#8d1f5c' },
+  { ...BEE_WORKER, stripeTop: '#b6f5a8', stripeMid: '#48b62e', stripeDeep: '#226614' },
+]
+
+/** Texture key for a bee wearing gate colour `c`. */
+export const beeTextureKey = (color?: number): string =>
+  color === undefined || color < 0 ? 'bee' : `beeC${color % BEE_GATE_PALETTES.length}`
+
 // Silhouette control points, in a body-local frame centred on the thorax,
 // x+ = EAST = the way the bee faces. Kept as point lists (not literal beziers)
 // so the shapes stay editable: `beeBlob` runs a closed Catmull-Rom through them.
@@ -113,12 +141,6 @@ const BEE_HEAD = { x: 36, y: -1, rx: 20.5, ry: 19 } as const
 const BEE_WING: readonly (readonly [number, number])[] = [
   [0, 0], [13, -9], [28, -12], [38, -9], [42, -1], [36, 6], [22, 9], [9, 6],
 ]
-/** The pale fur ruff that joins thorax to head. */
-const BEE_RUFF: readonly (readonly [number, number])[] = [
-  [20, -24], [26, -19], [28, -8], [28, 6], [25, 16], [19, 21],
-  [15, 14], [13, 2], [14, -12],
-]
-
 /** Colours sampled from `public/logo.png` — used by every NON-bee texture. */
 const LOGO = {
   /** The mark's warm near-black: outlines, stripes, head, stinger. */
@@ -160,6 +182,12 @@ export class PreloadScene extends Phaser.Scene {
     this.makeBeeSheet('beeQueen', BEE_QUEEN)
     this.makeFlapAnim('bee')
     this.makeFlapAnim('beeQueen')
+    // One sheet per exit colour — see BeePalette.stripeTop for why this is not
+    // a runtime tint.
+    BEE_GATE_PALETTES.forEach((pal, i) => {
+      this.makeBeeSheet(`beeC${i}`, pal)
+      this.makeFlapAnim(`beeC${i}`)
+    })
     this.makeArrowTexture()
     this.makeHornetTexture()
     this.makeCrownTexture()
@@ -347,22 +375,9 @@ export class PreloadScene extends Phaser.Scene {
     // FAR WING — behind the body, smaller, dimmer, lagging the near one.
     this.beeWing(ctx, phase, true, pal)
 
-    // LEGS — short tapered hooks. Long legs read as scratches at cell size.
-    ctx.save()
-    ctx.strokeStyle = pal.ink
-    ctx.lineCap = 'round'
-    for (const [x1, y1, cx, cy, x2, y2, w] of [
-      [-16, 23, -22, 32, -29, 29, 4.4],
-      [1, 25, 0, 35, -7, 35, 4.6],
-      [18, 19, 23, 31, 16, 33, 4.4],
-    ]) {
-      ctx.lineWidth = w
-      ctx.beginPath()
-      ctx.moveTo(x1, y1)
-      ctx.quadraticCurveTo(cx, cy, x2, y2)
-      ctx.stroke()
-    }
-    ctx.restore()
+    // No legs, no antennae, no fur collar. The logo has none of them, and the
+    // brief is the logo: an oval, two heavy stripes, a dark head, a stinger.
+    // Every one of those details was making the bee busier than its own mark.
 
     // STINGER — a wedge off the tail, drawn under the body so only its point shows.
     ctx.save()
@@ -436,18 +451,6 @@ export class PreloadScene extends Phaser.Scene {
     ctx.restore()
     ctx.restore()
 
-    // FUR RUFF — the pale collar where thorax meets head. Cheap, and it stops
-    // the bee reading as two disconnected blobs.
-    ctx.save()
-    ctx.globalAlpha = 0.9
-    const ruff = ctx.createLinearGradient(0, -26, 0, 24)
-    ruff.addColorStop(0, '#fff3cf')
-    ruff.addColorStop(1, '#e8a63c')
-    ctx.fillStyle = ruff
-    this.beeBlob(ctx, BEE_RUFF)
-    ctx.fill()
-    ctx.restore()
-
     // HEAD — a shaded sphere, not a flat ink disc, with its own rim light.
     ctx.save()
     this.beeHeadPath(ctx)
@@ -488,42 +491,26 @@ export class PreloadScene extends Phaser.Scene {
     ctx.stroke()
     ctx.restore()
 
-    // ANTENNAE — two curved whips with club tips, springing back on the beat.
+    // FACE — the logo's arrangement exactly: two white eyes with dark pupils,
+    // set diagonally on the dark head, the lower one slightly larger. Plus the
+    // one addition the brief asked for: EYEBROWS. They cost two strokes and
+    // they are what turns a mark into a character — a bee that is looking
+    // where it is about to fly rather than staring blankly.
+    this.beeEye(ctx, 33, -13, 7.2)
+    this.beeEye(ctx, 41, 3, 8.6)
     ctx.save()
-    ctx.strokeStyle = pal.ink
-    ctx.lineWidth = 4
+    ctx.strokeStyle = pal.inkTop
+    ctx.lineWidth = 3.4
     ctx.lineCap = 'round'
-    for (const [sx, sy, cx, cy, tx, ty] of [
-      [38, -15, 49, -30 - phase * 3, 54 - phase * 5, -37 - phase * 3],
-      [29, -17, 34, -33 - phase * 3, 37 - phase * 4, -41 - phase * 3],
-    ]) {
-      ctx.beginPath()
-      ctx.moveTo(sx, sy)
-      ctx.quadraticCurveTo(cx, cy, tx, ty)
-      ctx.stroke()
-      ctx.fillStyle = pal.ink
-      ctx.beginPath()
-      ctx.arc(tx, ty, 4.2, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = 'rgba(255,220,150,0.5)'
-      ctx.beginPath()
-      ctx.arc(tx - 1.2, ty - 1.4, 1.6, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    ctx.restore()
-
-    // FACE — a small far eye for the 3/4 read, one big glossy near eye, and a
-    // short smile. The smile sits BELOW the eye, which the rotate∘flip mirror
-    // preserves, so it never inverts into a frown on a westward bee.
-    this.beeEye(ctx, 28, -11, 5.6)
-    this.beeEye(ctx, 40, 1, 9.6)
-    ctx.save()
-    ctx.strokeStyle = 'rgba(255,228,176,0.9)'
-    ctx.lineWidth = 2.8
-    ctx.lineCap = 'round'
+    // Angled down toward the nose: eager, not cross. Drawn ABOVE the eyes, a
+    // relationship the rotate-then-mirror used for westward bees preserves.
     ctx.beginPath()
-    ctx.moveTo(43, 14)
-    ctx.quadraticCurveTo(48, 16, 51, 11)
+    ctx.moveTo(26, -24)
+    ctx.quadraticCurveTo(32, -27, 39, -24)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(36, -9)
+    ctx.quadraticCurveTo(43, -12, 50, -8)
     ctx.stroke()
     ctx.restore()
 
@@ -666,9 +653,9 @@ export class PreloadScene extends Phaser.Scene {
     ctx.translate(dx, 0)
     ctx.rotate((deg * Math.PI) / 180)
     const g = ctx.createLinearGradient(0, -34, 0, 34)
-    g.addColorStop(0, pal.inkTop)
-    g.addColorStop(0.42, pal.ink)
-    g.addColorStop(1, pal.inkDeep)
+    g.addColorStop(0, pal.stripeTop ?? pal.inkTop)
+    g.addColorStop(0.42, pal.stripeMid ?? pal.ink)
+    g.addColorStop(1, pal.stripeDeep ?? pal.inkDeep)
     ctx.fillStyle = g
     ctx.beginPath()
     ctx.ellipse(0, 0, w / 2, 40, 0, 0, Math.PI * 2)

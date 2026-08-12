@@ -10,6 +10,7 @@ import {
 } from '../systems/HexGrid'
 import { getLevel, LEVEL_COUNT, chapterOf } from '../levels'
 import { getCompassLevel, COMPASS_COUNT } from '../levels/compass'
+import { beeTextureKey } from './PreloadScene'
 import type { Axial, CellOccupant, Direction, LevelData, TapOutcome } from '../types'
 import { GATE_ANY } from '../types'
 import { GAME_WIDTH, GAME_HEIGHT, colors, layout } from '../config/gameConfig'
@@ -405,7 +406,16 @@ export class GameScene extends Phaser.Scene {
       // puzzle whose whole subject is direction, the piece has to carry its own
       // axis — reading a detached arrow to learn where a bee points is work the
       // art should be doing. (It also let the arrow move in off the neighbours.)
-      const sprite = this.add.sprite(x, y, occ.kind === 'queen' ? 'beeQueen' : 'bee', 0)
+      // A colour-matched bee wears its exit colour ON ITS STRIPES, from a sheet
+      // drawn that way — not a runtime tint, which multiplies and turns the
+      // gold body muddy.
+      const texKey =
+        occ.kind === 'queen'
+          ? 'beeQueen'
+          : this.compassMode
+            ? beeTextureKey(occ.color)
+            : 'bee'
+      const sprite = this.add.sprite(x, y, texKey, 0)
       sprite.setScale(0)
       sprite.setDepth(occ.kind === 'queen' ? 12 : 10)
       this.faceBee(sprite, occ.dir)
@@ -432,10 +442,9 @@ export class GameScene extends Phaser.Scene {
         .setDepth(occ.kind === 'queen' ? 13 : 11) // above the bee body, never tucked behind it
       // Compass mode: the bee's gate color is worn on the body and the aim
       // arrow — match the gate, read the route at a glance.
-      if (this.compassMode && occ.color !== undefined) {
-        const tint = COMPASS_TINTS[occ.color % COMPASS_TINTS.length]
-        sprite.setTint(tint)
-        arrow.setTint(tint)
+      if (this.compassMode && occ.color !== undefined && occ.color >= 0) {
+        // Only the chevron is tinted. The body carries its colour in the art.
+        arrow.setTint(COMPASS_TINTS[occ.color % COMPASS_TINTS.length])
       }
       sprite.setData('arrow', arrow)
       sprite.setData('arrowAngle', angle)
