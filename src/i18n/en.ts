@@ -25,7 +25,12 @@ export const en = {
   'hud.sealed': 'That order sealed the hive — move taken back, one move spent',
   'hud.stickyHive': '🍯 STICKY HIVE — carve it clean!',
   'hud.compassBadge': '🧭 COMPASS HIVE',
-  'compass.coach': 'Tap a bee to TURN it. Tap its lane to FLY. Match the gate color!',
+  // The mode's whole verb set, in the order it is learned. Colour matching is
+  // NOT mentioned here: uncoloured doors run to C14, and naming a rule before
+  // it exists is how a tutorial teaches the wrong game.
+  'compass.coach': 'TAP a bee to turn it. HOLD to send it flying. The hive is sealed — aim for a door.',
+  /** Shown from the first level that ships coloured doors. */
+  'compass.coachColor': 'Now the doors are picky: a bee only fits the door of its own colour.',
   'home.compass': '🧭 Compass Hive',
   'home.compassProgress': 'Level {n}/{total}',
   'home.compassLocked': 'Unlocks at L40',

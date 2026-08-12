@@ -21,7 +21,7 @@ import { BoardState } from '../src/systems/BoardState'
 import { searchCompassMinMoves, compassPlannerLossRate } from '../src/systems/SolverSearch'
 import { axialKey, DIRECTION_VECTORS } from '../src/systems/HexGrid'
 import { makeRng, mixSeed } from '../src/utils/rng'
-import type { LevelData } from '../src/types'
+import { GATE_ANY, type LevelData } from '../src/types'
 
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '../src/levels/compass.generated.json')
 const COUNT = 50
@@ -50,8 +50,20 @@ function slotFor(id: number): Slot {
     id,
     shape: shapes[id % (id <= 10 ? 2 : 4)],
     bees: id <= 3 ? 2 : id <= 8 ? 3 : id <= 20 ? 4 : id <= 35 ? 5 : 6,
-    colors: id <= 5 ? 2 : 3,
-    hasQueen: id >= 12,
+    // COLOURS ARRIVE LATE. The exits themselves are the first lesson: with the
+    // rim walled, "which bee can even reach a door" is already a real question,
+    // and the measured campaign proves the opposite arrangement teaches nothing
+    // (with an open rim, all 1420 opening taps across 300 levels are safe and
+    // none costs a move of optimality — there is no wrong first move in the
+    // whole game). So C1-14 ship UNCOLOURED exits (GATE_ANY: any bee, any
+    // door) and the puzzle is purely routing. Matching is layered on at C15,
+    // once turning and routing are second nature.
+    colors: id <= 14 ? 1 : id <= 30 ? 2 : 3,
+    // No queen. She was removed on the user's call, and the data agrees: of 95
+    // classified dead-end positions in the campaign, 100% were "workers jammed,
+    // queen has a clear lane, taking it loses". Queen-last manufactures every
+    // dead end there is, and this mode has enough pressure without her.
+    hasQueen: false,
     // Slack 2 through C30: rotation branching makes even "fair" boards measure
     // hot, and this ladder is NEW to every player — one spare move is the
     // deep-end rule only.
@@ -107,7 +119,7 @@ function genOne(slot: Slot): CompassOut | null {
         r: cell[1],
         dir: Math.floor(rng() * 6),
         kind: slot.hasQueen && i === 0 ? 'queen' : 'bee',
-        color: i % slot.colors,
+        color: slot.colors === 1 ? GATE_ANY : i % slot.colors,
       })
     }
     if (bees.length < slot.bees) continue
@@ -126,9 +138,22 @@ function genOne(slot: Slot): CompassOut | null {
       }
       if (idx < 0) break
       takenRims.add(idx)
-      gates.push([rims[idx][0], rims[idx][1], rims[idx][2], c])
+      // slot.colors === 1 means "no colours yet": one universal door that any
+      // bee may use, which is what GATE_ANY encodes.
+      gates.push([rims[idx][0], rims[idx][1], rims[idx][2], slot.colors === 1 ? GATE_ANY : c])
     }
     if (gates.length < slot.colors) continue
+    // Uncoloured ladders get a SECOND door, so early routing is about reaching
+    // a door rather than about there being only one.
+    if (slot.colors === 1) {
+      for (let g = 0; g < 60; g++) {
+        const i = Math.floor(rng() * rims.length)
+        if (takenRims.has(i)) continue
+        takenRims.add(i)
+        gates.push([rims[i][0], rims[i][1], rims[i][2], GATE_ANY])
+        break
+      }
+    }
 
     // Honey lakes on free cells.
     const honeyCells: Array<[number, number]> = []

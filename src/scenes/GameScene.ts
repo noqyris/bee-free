@@ -11,6 +11,7 @@ import {
 import { getLevel, LEVEL_COUNT, chapterOf } from '../levels'
 import { getCompassLevel, COMPASS_COUNT } from '../levels/compass'
 import type { Axial, CellOccupant, Direction, LevelData, TapOutcome } from '../types'
+import { GATE_ANY } from '../types'
 import { GAME_WIDTH, GAME_HEIGHT, colors, layout } from '../config/gameConfig'
 import { juice } from '../config/juiceConfig'
 import { themeForChapter, type ChapterTheme } from '../config/theme'
@@ -64,6 +65,13 @@ function hexPoints(cx: number, cy: number, radius: number): Phaser.Types.Math.Ve
 
 type EscapedOutcome = Extract<TapOutcome, { kind: 'escaped' }>
 type BlockedOutcome = Extract<TapOutcome, { kind: 'blocked' }>
+/**
+ * How long a press must be held before releasing LAUNCHES rather than turns.
+ * 260ms: long enough that a quick aiming tap never fires a bee by accident,
+ * short enough that committing does not feel like waiting.
+ */
+const LAUNCH_HOLD_MS = 260
+
 type StuckOutcome = Extract<TapOutcome, { kind: 'stuck' }>
 type ParkedOutcome = Extract<TapOutcome, { kind: 'parked' }>
 
@@ -86,6 +94,9 @@ export class GameScene extends Phaser.Scene {
   /** Live honey overlays, keyed "q,r". Honey is permanent — blobs only ever fade OUT on undo/clean. */
   private honeyBlobs = new Map<string, Phaser.GameObjects.Image>()
   private pending?: { occ: CellOccupant; q: number; r: number }
+  /** True once the press has been held long enough that release will LAUNCH. */
+  private launchArmed = false
+  private armTimer?: Phaser.Time.TimerEvent
   /** Set when the player took a revive (ad or +moves on the fail screen); caps the win at 1 star. */
   private usedRevive = false
   /**
@@ -490,11 +501,16 @@ export class GameScene extends Phaser.Scene {
       | 'coach.queen'
       | 'coach.hornet'
       | 'compass.coach'
+      | 'compass.coachColor'
       | null = null
     // Compass mode re-teaches the verb set on its first three levels — the
     // rotate-then-fly input is new even to a campaign veteran.
     if (this.compassMode) {
       if (id <= 3) key = 'compass.coach'
+      // Colour matching is a SECOND lesson, taught on the levels that first
+      // ship coloured doors rather than up front — see the note in en.ts.
+      else if (id >= 15 && id <= 17 && (this.level.gates ?? []).some((g) => g[3] !== GATE_ANY))
+        key = 'compass.coachColor'
     } else if (id === 1) key = 'coach.tap'
     else if (id <= 3) key = 'coach.trail'
     else if (id === 8 || id === 20 || id === 70) key = 'coach.trailDry'
@@ -1197,6 +1213,21 @@ export class GameScene extends Phaser.Scene {
       return
     }
     this.pending = { occ, q: cell.q, r: cell.r }
+    this.launchArmed = false
+    // Compass: a SHORT press turns the bee, a LONG press launches it. The
+    // player cannot feel a millisecond threshold, so the moment it passes we
+    // say so — a tick, and the lane preview goes solid. Without that signal the
+    // control is a coin flip.
+    this.armTimer?.remove(false)
+    this.armTimer = this.compassMode
+      ? this.time.delayedCall(LAUNCH_HOLD_MS, () => {
+          if (!this.pending) return
+          this.launchArmed = true
+          feedback.press()
+          this.previewGfx.setAlpha(1)
+        })
+      : undefined
+    if (this.compassMode) this.previewGfx.setAlpha(juice.press.previewDimAlpha)
     this.drawPreview(occ)
     // The grab itself must be felt: soft tick + the bee lifts under the finger.
     feedback.press()
@@ -1242,20 +1273,20 @@ export class GameScene extends Phaser.Scene {
 
     const cell = this.cellAt(pointer)
     if (this.compassMode) {
-      if (cell.q === pending.q && cell.r === pending.r) {
-        // Compass: release on the bee ROTATES it 60° (free) and re-aims.
-        this.rotatePending(pending)
-        return
-      }
-      // Release on the previewed lane (path or landing) commits the flight;
-      // anywhere else cancels — same muscle memory as the campaign's cancel.
-      const out = this.board.trace(pending.occ)
-      const onLane =
-        out.path.some((c) => c.q === cell.q && c.r === cell.r) ||
-        (out.kind === 'stuck' && out.at.q === cell.q && out.at.r === cell.r)
-      if (!onLane) {
+      this.armTimer?.remove(false)
+      this.armTimer = undefined
+      // Released off the bee cancels, exactly as in the campaign.
+      if (cell.q !== pending.q || cell.r !== pending.r) {
         const lifted = this.beeSprites.get(pending.occ.id)
         if (lifted && lifted.active) this.startIdle(lifted)
+        return
+      }
+      // SHORT press turns the bee (free), LONG press launches it. Aiming and
+      // committing are the two verbs of the mode, and putting them on the same
+      // finger — one gesture, two durations — is what lets a bee be turned
+      // several times and then sent without ever moving the hand.
+      if (!this.launchArmed) {
+        this.rotatePending(pending)
         return
       }
     } else if (cell.q !== pending.q || cell.r !== pending.r) {

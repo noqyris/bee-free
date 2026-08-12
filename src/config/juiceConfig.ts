@@ -91,6 +91,13 @@ export const juice = {
     liftMs: 70,
     /** Preview dims to this alpha while the finger has slid off the bee. */
     cancelAlpha: 0.22,
+    /**
+     * Compass: how faint the lane preview is BEFORE the press has been held
+     * long enough to launch. It snaps to full opacity the instant releasing
+     * would send the bee — the only way the player can feel where a
+     * millisecond threshold sits.
+     */
+    previewDimAlpha: 0.45,
   },
   spawn: {
     staggerMs: 28,
