@@ -68,11 +68,19 @@ function slotFor(id: number, count: number): Slot {
     id,
     chapter,
     shape,
-    bees: id <= 5 ? 2 : id <= 15 ? 3 : id <= 45 ? 4 : id <= 120 ? 5 : 6,
+    // Capped at 5. Six bees behind two doors measured an 8% candidate
+    // acceptance rate — and most of those "failures" were the rotation-aware
+    // search hitting its node cap rather than a genuinely unsolvable board, so
+    // the cost was being paid to prove nothing.
+    bees: id <= 5 ? 2 : id <= 15 ? 3 : id <= 60 ? 4 : 5,
     // Doors are the difficulty dial (measured: 3 doors 0.48 loss vs 2 doors
     // 0.78 on the same board) — far stronger than the move budget, which is
     // nearly inert here exactly as it was in the old campaign.
-    doors: id <= 40 ? 4 : id <= 120 ? 3 : 2,
+    // Never fewer than three. Two doors was the single worst setting on both
+    // axes at once: measured harder to PLAY (0.78 loss vs 0.48 at three) and
+    // an order of magnitude harder to GENERATE, because every bee has to queue
+    // through one of two openings and the search explodes proving it.
+    doors: id <= 40 ? 5 : id <= 120 ? 4 : 3,
     // Doors first, colours much later: with a sealed rim, "which bee can even
     // reach a door" is already a real decision, and it is the one the old game
     // never asked.
@@ -183,7 +191,7 @@ function genOne(slot: Slot): OutLevel | null {
       gates,
     }
 
-    const min = searchCompassMinMoves(new BoardState(base), slot.bees + 9, 1_200_000)
+    const min = searchCompassMinMoves(new BoardState(base), slot.bees + 8, 700_000)
     if (min === null) continue
     // A board solved in one tap per bee has no routing in it — everybody just
     // turns once and leaves. That is the old campaign's failure, restated.
@@ -227,9 +235,14 @@ if (shardArg !== -1) {
   const failed: number[] = []
   for (let id = 1; id <= total; id++) {
     if ((id - 1) % stride !== offset) continue
+    const t = Date.now()
     const l = genOne(slotFor(id, total))
     if (!l) failed.push(id)
     else out.push(l)
+    // Progress goes to stderr so a long run can be watched. The parent only
+    // writes the file at the very end, and a two-hour silent run with no way to
+    // tell "working" from "wedged" is not something to repeat.
+    process.stderr.write(`L${id} ${l ? 'ok' : 'FAIL'} ${((Date.now() - t) / 1000).toFixed(1)}s\n`)
   }
   writeFileSync(outFile, JSON.stringify({ levels: out, failed }))
   process.exit(0)
@@ -245,7 +258,13 @@ function runShard(offset: number, stride: number): Promise<{ levels: OutLevel[];
       { env: process.env },
     )
     let err = ''
-    child.stderr.on('data', (d) => (err += d))
+    child.stderr.on('data', (d) => {
+      err += d
+      // Forward as well as buffer. Buffering alone means the per-level progress
+      // lines only ever surface on a CRASH, which is precisely backwards for a
+      // run that takes hours.
+      process.stderr.write(d)
+    })
     child.on('close', (code) => {
       if (code !== 0) return rej(new Error(`shard ${offset} exited ${code}:\n${err}`))
       const parsed = JSON.parse(readFileSync(outFile, 'utf8'))
