@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BoardState } from '../src/systems/BoardState'
 import { searchCompassMinMoves } from '../src/systems/SolverSearch'
 import { COMPASS_LEVELS, COMPASS_COUNT, COMPASS_READY } from '../src/levels/compass'
+import { GATE_ANY } from '../src/types'
 import { axialKey } from '../src/systems/HexGrid'
 import generated from '../src/levels/compass.generated.json'
 
@@ -40,6 +41,44 @@ describe.skipIf(!COMPASS_READY)('shipped Compass ladder', () => {
     expect(COMPASS_COUNT).toBe(50)
     expect(COMPASS_LEVELS.length).toBe(50)
     COMPASS_LEVELS.forEach((l, i) => expect(l.id).toBe(i + 1))
+  })
+
+  // These four pin the redesign IN THE DATA, which is the gap that let a commit
+  // claim "doors from level 1, queen removed" while the shipped JSON still had
+  // 39 queens and zero universal doors. The generator saying so is not the same
+  // as the game shipping it.
+
+  it('ships no queen anywhere — she is retired from the mode, not just hidden', () => {
+    const withQueen = COMPASS_LEVELS.filter((l) => l.bees.some((b) => b.kind === 'queen'))
+    expect(withQueen.map((l) => l.id)).toEqual([])
+  })
+
+  it('teaches doors before colours: C1-14 are universal, C15+ are matched', () => {
+    for (const l of COMPASS_LEVELS) {
+      const colours = new Set((l.gates ?? []).map((g) => g[3]))
+      if (l.id <= 14) {
+        expect([...colours], `level ${l.id} should be uncoloured`).toEqual([GATE_ANY])
+      } else {
+        expect(colours.has(GATE_ANY), `level ${l.id} should be coloured`).toBe(false)
+      }
+    }
+  })
+
+  it('gives the teaching band more doors than the deep end', () => {
+    const doors = (id: number): number => (COMPASS_LEVELS[id - 1].gates ?? []).length
+    const early = [1, 2, 3, 4, 5].map(doors)
+    expect(Math.min(...early), 'early levels want at least three doors').toBeGreaterThanOrEqual(3)
+  })
+
+  it('keeps forced hops in the band that measured playable', () => {
+    // Difficulty here is near-monotone in forced hops (minMoves - beeCount):
+    // 2.6-3.6 measured 0.43-0.59 planner loss and plays; 4.5-5.4 measured
+    // 0.86-0.96, where a one-ply player essentially never wins.
+    const raw = (generated as { levels: Array<{ minMoves: number }> }).levels
+    const hops = COMPASS_LEVELS.map((l, i) => raw[i].minMoves - l.bees.length)
+    const mean = hops.reduce((a, b) => a + b, 0) / hops.length
+    expect(mean, `mean forced hops ${mean.toFixed(2)}`).toBeLessThan(4.5)
+    expect(mean).toBeGreaterThan(1)
   })
 
   it('marks every level as compass mode and gives each one gates', () => {
