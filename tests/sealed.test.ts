@@ -78,6 +78,27 @@ describe('sealed hive', () => {
     expect(b.isSealed()).toBe(true) // …but only into a loss
   })
 
+  it('never reports a rotation hive as sealed — turning is always a live move', () => {
+    // Regression: the first version of isSealed() ignored rotation and returned
+    // true at the OPENING of 15 of the 50 compass levels, so the rescue would
+    // have rewound and charged a move on a board nobody had touched yet.
+    const b = new BoardState({
+      id: 0,
+      cells: [
+        [0, 0],
+        [1, 0],
+      ],
+      // Facing a walled rim with no gate: the flight bumps, but the bee can turn.
+      bees: [{ q: 0, r: 0, dir: Direction.W, kind: 'bee', color: 0 }],
+      moveBudget: 9,
+      threeStarSpare: 0,
+      compass: true,
+      gates: [[1, 0, Direction.E, 0]],
+    })
+    expect(b.trace(b.occupantAt(0, 0)!).kind).toBe('blocked')
+    expect(b.isSealed()).toBe(false)
+  })
+
   it('is NOT sealed once the queen is the last one left', () => {
     const b = board([{ q: 0, r: 0, dir: Direction.E, kind: 'queen' }])
     expect(b.isSealed()).toBe(false) // now she is allowed to leave

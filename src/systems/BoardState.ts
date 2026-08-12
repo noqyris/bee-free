@@ -381,6 +381,12 @@ export class BoardState {
    */
   isSealed(): boolean {
     if (this.status !== 'playing') return false
+    // A hive with rotation in it can never be sealed: turning is free and always
+    // available, so there is always a legal action that changes the position.
+    // Without this the rescue fires on boards that are perfectly alive — it was
+    // measured true at the OPENING of 15 of the 50 compass levels, where the
+    // player had not even moved yet.
+    if (this.compassMode) return false
     const goals = this.goalRemaining
     for (const occ of this.occupants.values()) {
       if (!occ.isTappable()) continue
