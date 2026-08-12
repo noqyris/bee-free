@@ -24,7 +24,7 @@ interface BoardSnapshot {
   origin: { x: number; y: number }
   /** Cells currently covered in sticky honey — the trail. */
   sticky: number
-  occupants: Array<{ q: number; r: number; kind: string; outcome: string }>
+  occupants: Array<{ q: number; r: number; kind: string; outcome: string; pathLen: number }>
 }
 
 async function waitForGame(page: Page): Promise<void> {
@@ -75,6 +75,10 @@ async function snapshot(page: Page): Promise<BoardSnapshot> {
         r: o.r,
         kind: o.kind,
         outcome: board.trace(o).kind,
+        // How many cells the flight would CROSS. On a sealed board a bee can
+        // sit right next to its door and leave without crossing anything, so
+        // "it flew" and "it laid a trail" are no longer the same event.
+        pathLen: board.trace(o).path.length,
       })),
     }
   })
@@ -93,7 +97,10 @@ async function tapCell(page: Page, snap: BoardSnapshot, q: number, r: number): P
   const y = box.y + (gy / GAME_H) * box.height
   await page.mouse.move(x, y)
   await page.mouse.down()
-  await page.waitForTimeout(60) // hold to show the aim preview
+  // HOLD past the launch threshold. Under the sealed-rim rules a short press
+  // TURNS the bee and only a long one sends it, so a 60ms tap — which used to
+  // fly it — now just rotates and the level never progresses.
+  await page.waitForTimeout(380)
   await page.mouse.up()
   // Phaser processes pointer events on its NEXT update frame — checking
   // inputLocked immediately would pass before the flight even starts. Give it
@@ -106,6 +113,49 @@ async function tapCell(page: Page, snap: BoardSnapshot, q: number, r: number): P
     return !s || !s.scene.isActive() || !s.inputLocked
   }, null, { timeout: 10_000 })
   await page.waitForTimeout(120)
+}
+
+
+/**
+ * SHORT press on a cell — under the sealed-rim rules this TURNS the bee 60°
+ * instead of launching it. Aiming and committing are the same gesture at two
+ * durations, so a test that only ever holds can never aim.
+ */
+async function rotateCell(page: Page, snap: BoardSnapshot, q: number, r: number): Promise<void> {
+  const gx = snap.origin.x + snap.cellSize * SQRT3 * (q + r / 2)
+  const gy = snap.origin.y + snap.cellSize * 1.5 * r
+  const box = await page.locator('canvas').boundingBox()
+  if (!box) throw new Error('canvas not found')
+  const x = box.x + (gx / GAME_W) * box.width
+  const y = box.y + (gy / GAME_H) * box.height
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.waitForTimeout(80) // well under the launch threshold
+  await page.mouse.up()
+  await page.waitForTimeout(140)
+}
+
+/**
+ * Turn a bee until its flight would actually do something, then send it.
+ * Returns false if six turns bring it back where it started with no way out —
+ * which on a sealed board is a real state, not a test failure.
+ */
+async function aimAndFly(page: Page, q: number, r: number): Promise<boolean> {
+  for (let turn = 0; turn < 6; turn++) {
+    const snap = await snapshot(page)
+    const bee = snap.occupants.find((o) => o.q === q && o.r === r)
+    if (!bee) return false
+    const goals = snap.occupants.filter((o) => o.kind !== 'hornet').length
+    const usable =
+      (bee.outcome === 'escaped' || bee.outcome === 'stuck') &&
+      !(bee.kind === 'queen' && bee.outcome === 'escaped' && goals > 1)
+    if (usable) {
+      await tapCell(page, snap, q, r)
+      return true
+    }
+    await rotateCell(page, snap, q, r)
+  }
+  return false
 }
 
 test.describe('Bee Free — full playtest', () => {
@@ -142,25 +192,21 @@ test.describe('Bee Free — full playtest', () => {
   test('plays level 1 to a win and unlocks the next level', async ({ page }) => {
     await startLevel(page, 0)
 
-    // Play the obvious competent line: fly out any bee whose path is clear,
-    // and when none is, take a bee that merely gets stuck in the honey rather
-    // than waste the move on a bump. Level 1 is generously budgeted, so this
-    // always finishes it — the levels where it does NOT are the point of the
-    // difficulty curve, and are covered by the unit tests.
+    // Play the obvious competent line under the sealed-rim rules: for each bee
+    // in turn, TURN it until its flight would do something, then send it. The
+    // model confirms this greedy policy clears level 1 in its minimum 4 moves,
+    // so a failure here is the INPUT path, which is exactly what an e2e is for.
     for (let i = 0; i < 30; i++) {
       const snap = await snapshot(page)
-      if (snap.remaining === 0) break
-      const goals = snap.occupants.filter((o) => o.kind !== 'hornet').length
-      // Save the queen for last — leaving early is an instant loss.
-      const usable = snap.occupants.filter(
-        (o) =>
-          o.kind !== 'hornet' &&
-          (o.outcome === 'escaped' || o.outcome === 'stuck') &&
-          !(o.kind === 'queen' && o.outcome === 'escaped' && goals > 1),
-      )
-      const pick = usable.find((o) => o.outcome === 'escaped') ?? usable[0]
-      if (!pick) throw new Error(`no safe move at step ${i}`)
-      await tapCell(page, snap, pick.q, pick.r)
+      if (snap.remaining === 0 || snap.status !== 'playing') break
+      let moved = false
+      for (const cand of snap.occupants.filter((o) => o.kind !== 'hornet')) {
+        if (await aimAndFly(page, cand.q, cand.r)) {
+          moved = true
+          break
+        }
+      }
+      if (!moved) throw new Error(`no bee could be aimed and flown at step ${i}`)
     }
 
     await expect
@@ -243,17 +289,40 @@ test.describe('Bee Free — full playtest', () => {
   test('a flying bee lays a honey trail behind it', async ({ page }) => {
     await startLevel(page, 20)
     const snap = await snapshot(page)
-    // Permanent honey sits under every goal occupant from the very start —
-    // a "fresh" board carries exactly one honey cell per bee/queen.
+    // Permanent honey sits under every goal occupant from the start, PLUS the
+    // lakes the generator seeds from L13 on. So a fresh board carries at least
+    // one cell per bee — it used to be exactly one, before lakes existed.
     const goals = snap.occupants.filter((o) => o.kind !== 'hornet').length
-    expect(snap.sticky, 'fresh board: honey only under the bees').toBe(goals)
+    expect(snap.sticky, 'fresh board: honey under every bee, plus lakes').toBeGreaterThanOrEqual(
+      goals,
+    )
+    const before = snap.sticky
 
-    const flier = snap.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'escaped')
-    if (!flier) throw new Error('no bee with a clear path on level 21')
-    await tapCell(page, snap, flier.q, flier.r)
+    // Aim first: on a sealed board a bee usually starts facing a wall. And the
+    // flight has to actually CROSS cells — a bee beside its door leaves without
+    // touching anything, which is a fine move and a useless trail test.
+    let flew = false
+    for (const cand of snap.occupants.filter((o) => o.kind !== 'hornet')) {
+      for (let turn = 0; turn < 6 && !flew; turn++) {
+        const now = await snapshot(page)
+        const bee = now.occupants.find((o) => o.q === cand.q && o.r === cand.r)
+        if (!bee) break
+        // Must ESCAPE, not stick. A landing COLLECTS the honey it lands in, so
+        // a stuck flight nets +path −1 and a one-cell hop leaves the count
+        // unchanged — which looks exactly like "no trail was laid".
+        if (bee.outcome === 'escaped' && bee.pathLen > 0) {
+          await tapCell(page, now, bee.q, bee.r)
+          flew = true
+          break
+        }
+        await rotateCell(page, now, bee.q, bee.r)
+      }
+      if (flew) break
+    }
+    expect(flew, 'no bee could be aimed into a flight that crosses cells').toBe(true)
 
     const after = await snapshot(page)
-    expect(after.sticky, 'the flight should have smeared honey').toBeGreaterThan(0)
+    expect(after.sticky, 'the flight should have smeared more honey').toBeGreaterThan(before)
   })
 
   test('a fresh trail catches the next bee to cross it', async ({ page }) => {
@@ -266,14 +335,17 @@ test.describe('Bee Free — full playtest', () => {
       // Never fly the queen while others remain — that is an instant loss, and
       // on the current boards she is often the first bee with a clear path.
       const goals = snap.occupants.filter((o) => o.kind !== 'hornet').length
-      const flier = snap.occupants.find(
-        (o) =>
-          o.kind !== 'hornet' &&
-          o.outcome === 'escaped' &&
-          !(o.kind === 'queen' && goals > 1),
-      )
-      if (!flier) continue
-      await tapCell(page, snap, flier.q, flier.r)
+      // Aim before sending: on a sealed board nobody starts with a clear lane.
+      let flew = false
+      for (const cand of snap.occupants.filter(
+        (o) => o.kind !== 'hornet' && !(o.kind === 'queen' && goals > 1),
+      )) {
+        if (await aimAndFly(page, cand.q, cand.r)) {
+          flew = true
+          break
+        }
+      }
+      if (!flew) continue
 
       const mid = await snapshot(page)
       const sticky = mid.occupants.find((o) => o.kind !== 'hornet' && o.outcome === 'stuck')

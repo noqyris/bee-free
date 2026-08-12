@@ -120,7 +120,10 @@ describe.skipIf(!OPEN_RIM)('generated level set', () => {
         expect(honeyCount, `level ${l.id}`).toBeLessThanOrEqual(Math.ceil(free * 0.6) + 1)
         // The special must be a real puzzle, not a crawl: planning pressure on
         // par with the surrounding band. (Full-flood grind measures ~0 here.)
-        expect(generated.levels[l.id - 1].planningLoss, `level ${l.id}`).toBeGreaterThanOrEqual(0.2)
+        expect(
+          (generated.levels[l.id - 1] as { planningLoss?: number }).planningLoss ?? 0,
+          `level ${l.id}`,
+        ).toBeGreaterThanOrEqual(0.2)
       } else if (l.id >= 35) {
         expect(honeyCount, `level ${l.id}`).toBe(2)
       } else {

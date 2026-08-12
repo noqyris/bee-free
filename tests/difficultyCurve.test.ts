@@ -35,7 +35,7 @@ const OPEN_RIM = (generated as { progression?: string }).progression !== 'sealed
  */
 
 function planningLoss(level: LevelData): number {
-  return generated.levels[level.id - 1]?.planningLoss ?? 0
+  return (generated.levels[level.id - 1] as { planningLoss?: number } | undefined)?.planningLoss ?? 0
 }
 
 function plannerLoss(level: LevelData): number {

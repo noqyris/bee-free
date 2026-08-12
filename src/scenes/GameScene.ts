@@ -137,12 +137,12 @@ export class GameScene extends Phaser.Scene {
     // decides for itself; `mode` only still picks which ladder to load.
     this.compassLadder = data.mode === 'compass'
     this.compassMode = data.mode === 'compass'
-    const max = this.compassMode ? COMPASS_COUNT - 1 : LEVEL_COUNT - 1
+    const max = this.compassLadder ? COMPASS_COUNT - 1 : LEVEL_COUNT - 1
     this.levelIndex = Phaser.Math.Clamp(data.levelIndex ?? 0, 0, max)
   }
 
   create(): void {
-    this.level = this.compassMode ? getCompassLevel(this.levelIndex) : getLevel(this.levelIndex)
+    this.level = this.compassLadder ? getCompassLevel(this.levelIndex) : getLevel(this.levelIndex)
     if (this.level.compass) this.compassMode = true
     this.theme = themeForChapter(chapterOf(this.level.id))
     // Silent difficulty easing: bonus moves after a fail streak (spec §4).
@@ -2002,14 +2002,18 @@ export class GameScene extends Phaser.Scene {
       const collected = this.level.flooded
         ? Math.min(this.board.collectedHoney, FLOODED_HONEY_CAP)
         : this.board.collectedHoney
-      const honey = this.compassMode
+      // Which SAVE TRACK a win lands in follows the ladder, never the rules.
+      // Conflating the two cost a real bug: once the campaign started carrying
+      // sealed-rim rules, every campaign win was recorded against the Compass
+      // track and the player's progress never advanced.
+      const honey = this.compassLadder
         ? saveManager.recordCompassWin(this.level.id, stars, COMPASS_COUNT, collected)
         : saveManager.recordWin(this.level.id, stars, LEVEL_COUNT, collected)
       this.inputLocked = true
       feedback.win()
       this.time.delayedCall(juice.ui.resultDelayWinMs, () => {
         this.scene.launch('LevelComplete', {
-          mode: this.compassMode ? 'compass' : undefined,
+          mode: this.compassLadder ? 'compass' : undefined,
           levelIndex: this.levelIndex,
           chapter: chapterOf(this.level.id),
           stars,
@@ -2028,7 +2032,7 @@ export class GameScene extends Phaser.Scene {
       feedback.fail()
       this.time.delayedCall(juice.ui.resultDelayLoseMs, () => {
         this.scene.launch('LevelFailed', {
-          mode: this.compassMode ? 'compass' : undefined,
+          mode: this.compassLadder ? 'compass' : undefined,
           levelIndex: this.levelIndex,
           chapter: chapterOf(this.level.id),
           beesLeft: this.board.remaining,

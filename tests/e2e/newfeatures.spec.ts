@@ -73,14 +73,20 @@ async function snapshot(page: Page): Promise<Snap> {
   })
 }
 
-async function tapGame(page: Page, gx: number, gy: number): Promise<void> {
+/**
+ * `holdMs` matters on the BOARD: under the sealed-rim rules a short press turns
+ * a bee and only a long one launches it, so a cell tap has to outlast the
+ * threshold. UI buttons want the short press — holding one changes nothing, but
+ * a shared 380ms would make every button test needlessly slow.
+ */
+async function tapGame(page: Page, gx: number, gy: number, holdMs = 60): Promise<void> {
   const box = await page.locator('canvas').boundingBox()
   if (!box) throw new Error('canvas not found')
   const x = box.x + (gx / GAME_W) * box.width
   const y = box.y + (gy / GAME_H) * box.height
   await page.mouse.move(x, y)
   await page.mouse.down()
-  await page.waitForTimeout(60)
+  await page.waitForTimeout(holdMs)
   await page.mouse.up()
   await page.waitForTimeout(420)
 }
@@ -90,6 +96,7 @@ async function tapCell(page: Page, snap: Snap, q: number, r: number): Promise<vo
     page,
     snap.origin.x + snap.cellSize * SQRT3 * (q + r / 2),
     snap.origin.y + snap.cellSize * 1.5 * r,
+    380, // hold past the launch threshold — a short press only turns the bee
   )
   // Phaser processes pointer events on its NEXT update frame — give the flight
   // two frames to begin, then wait for it to resolve (input unlock), or the
@@ -101,6 +108,32 @@ async function tapCell(page: Page, snap: Snap, q: number, r: number): Promise<vo
     return !s || !s.scene.isActive() || !s.inputLocked
   }, null, { timeout: 10_000 })
   await page.waitForTimeout(120)
+}
+
+
+/**
+ * Turn a bee until its flight would do something, then send it. Under the
+ * sealed-rim rules a bee usually starts facing a wall, so "find one that can
+ * fly right now" — which is what these tests used to do — finds nothing.
+ */
+async function aimAndFly(page: Page, q: number, r: number): Promise<boolean> {
+  for (let turn = 0; turn < 6; turn++) {
+    const snap = await snapshot(page)
+    const bee = snap.occupants.find((o) => o.q === q && o.r === r)
+    if (!bee) return false
+    if (bee.outcome === 'escaped' || bee.outcome === 'stuck') {
+      await tapCell(page, snap, q, r)
+      return true
+    }
+    // Short press = turn.
+    await tapGame(
+      page,
+      snap.origin.x + snap.cellSize * SQRT3 * (q + r / 2),
+      snap.origin.y + snap.cellSize * 1.5 * r,
+      80,
+    )
+  }
+  return false
 }
 
 function readSave(raw: string | null): any {
@@ -195,12 +228,16 @@ test.describe('undo value guarantees', () => {
   test('undo keeps +3 Moves bought after the snapshot', async ({ page }) => {
     await startLevel(page, 10)
     const snap = await snapshot(page)
-    // One real move first (any escape/stuck), so history is non-empty.
-    const mover = snap.occupants.find(
-      (o) => o.kind !== 'hornet' && (o.outcome === 'escaped' || o.outcome === 'stuck'),
-    )
-    expect(mover).toBeTruthy()
-    await tapCell(page, snap, mover!.q, mover!.r)
+    // One real move first, so history is non-empty. On a sealed board that
+    // means aiming before sending — no bee starts with a clear lane.
+    let flew = false
+    for (const cand of snap.occupants.filter((o) => o.kind !== 'hornet')) {
+      if (await aimAndFly(page, cand.q, cand.r)) {
+        flew = true
+        break
+      }
+    }
+    expect(flew, 'no bee could be aimed and flown').toBe(true)
 
     const budgetBefore = await page.evaluate(() => {
       const s: any = (window as any).__game.scene.getScene('Game')
