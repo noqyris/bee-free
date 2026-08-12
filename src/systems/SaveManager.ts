@@ -249,7 +249,25 @@ class SaveManager {
   isUnlocked(levelId: number): boolean {
     // Dev toggle: every level playable for testing (see config/devConfig.ts).
     if (DEV_UNLOCK_ALL_LEVELS) return true
+    // TestFlight builds unlock everything so a tester can jump straight to any
+    // level. Driven by the BUILD ENVIRONMENT, not a compile-time flag, for the
+    // same reason the ad units are: a flag has to be remembered and flipped
+    // back, and the one release note that says "set this to false before
+    // shipping" is exactly the kind of instruction that gets missed. The App
+    // Store build progresses normally from one binary.
+    if (this.testFlightUnlockAll) return true
     return levelId <= this.data.currentLevel
+  }
+
+  /**
+   * Set once at boot from the StoreKit environment. Defaults to false, so a
+   * failed check or a web build never unlocks the campaign.
+   */
+  private testFlightUnlockAll = false
+
+  /** Called during boot with the result of `isSandboxBuild()`. */
+  setTestFlightUnlock(on: boolean): void {
+    this.testFlightUnlockAll = on
   }
 
   get currentLevel(): number {

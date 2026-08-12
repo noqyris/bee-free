@@ -190,3 +190,25 @@ describe('transaction ledger (purchase dedupe)', () => {
     expect(saveManager.get().grantedTransactionIds.filter((t) => t === 'tx1')).toHaveLength(1)
   })
 })
+
+describe('TestFlight level unlock', () => {
+  it('locks levels ahead of progress by default', () => {
+    saveManager.setTestFlightUnlock(false)
+    expect(saveManager.isUnlocked(1)).toBe(true)
+    expect(saveManager.isUnlocked(300)).toBe(false)
+  })
+
+  it('unlocks everything once the build reports as TestFlight', () => {
+    // Driven by the build ENVIRONMENT rather than a compile-time flag, so
+    // nobody has to remember to switch it back before an App Store submission
+    // — the same reasoning that already picks test vs live ad units.
+    saveManager.setTestFlightUnlock(true)
+    expect(saveManager.isUnlocked(300)).toBe(true)
+    saveManager.setTestFlightUnlock(false)
+  })
+
+  it('defaults to LOCKED, so a failed check never hands out the campaign', () => {
+    saveManager.setTestFlightUnlock(false)
+    expect(saveManager.isUnlocked(300)).toBe(false)
+  })
+})
