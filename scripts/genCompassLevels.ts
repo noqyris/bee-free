@@ -35,6 +35,15 @@ interface Slot {
   slack: number
   lakes: number
   floor: number
+  /**
+   * Upper acceptance bound. Difficulty here is a near-monotone function of
+   * FORCED HOPS (minMoves - beeCount), and measured planner loss runs
+   * 0.43-0.59 at 2.6-3.6 hops but 0.86-0.96 at 4.5-5.4 — where a one-ply
+   * player essentially never wins. Random candidates land in that top band far
+   * more often than in the playable one, so accepting the first candidate
+   * ABOVE a floor ships a punishing ladder by default. The band is the fix.
+   */
+  ceiling: number
   minHops: number // minMoves - goals must be at least this
 }
 
@@ -73,6 +82,8 @@ function slotFor(id: number): Slot {
     // candidates far more common, which is most of the generation speed.
     lakes: id <= 6 ? 0 : id <= 20 ? 3 : 4,
     floor: id <= 8 ? 0 : Math.min(0.1 + 0.3 * p, 0.4),
+    // Aim at 0.25-0.55 early, opening to ~0.65 at the very end.
+    ceiling: Math.min(0.45 + 0.2 * p, 0.65),
     minHops: id <= 8 ? 0 : 1,
   }
 }
@@ -145,13 +156,19 @@ function genOne(slot: Slot): CompassOut | null {
     if (gates.length < slot.colors) continue
     // Uncoloured ladders get a SECOND door, so early routing is about reaching
     // a door rather than about there being only one.
+    // Gate scarcity is the strongest structural difficulty dial that was
+    // measured (2 gates 0.78 loss vs 3 gates 0.48 on the same board), so the
+    // teaching band gets THREE doors and the ladder tightens to two.
     if (slot.colors === 1) {
-      for (let g = 0; g < 60; g++) {
-        const i = Math.floor(rng() * rims.length)
-        if (takenRims.has(i)) continue
-        takenRims.add(i)
-        gates.push([rims[i][0], rims[i][1], rims[i][2], GATE_ANY])
-        break
+      const extra = slot.id <= 20 ? 2 : 1
+      for (let e = 0; e < extra; e++) {
+        for (let g = 0; g < 60; g++) {
+          const i = Math.floor(rng() * rims.length)
+          if (takenRims.has(i)) continue
+          takenRims.add(i)
+          gates.push([rims[i][0], rims[i][1], rims[i][2], GATE_ANY])
+          break
+        }
       }
     }
 
