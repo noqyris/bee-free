@@ -130,6 +130,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   init(data: GameSceneData): void {
+    // Read the rules off the LEVEL, not off how the scene was launched. The
+    // campaign is moving onto the sealed-rim rules level by level, so a board
+    // decides for itself; `mode` only still picks which ladder to load.
     this.compassMode = data.mode === 'compass'
     const max = this.compassMode ? COMPASS_COUNT - 1 : LEVEL_COUNT - 1
     this.levelIndex = Phaser.Math.Clamp(data.levelIndex ?? 0, 0, max)
@@ -137,6 +140,7 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.level = this.compassMode ? getCompassLevel(this.levelIndex) : getLevel(this.levelIndex)
+    if (this.level.compass) this.compassMode = true
     this.theme = themeForChapter(chapterOf(this.level.id))
     // Silent difficulty easing: bonus moves after a fail streak (spec §4).
     const bonus = difficultyDirector.bonusMovesFor(this.level.id)

@@ -12,13 +12,26 @@ const LEVELS: ReadonlyArray<LevelData> = generated.levels.map((l) => ({
   cells: l.cells.map((c) => [c[0], c[1]] as readonly [number, number]),
   honeyCells: (l.honeyCells ?? []).map((c) => [c[0], c[1]] as readonly [number, number]),
   bees: l.bees.map(
-    (b): BeeSpec => ({ q: b.q, r: b.r, dir: b.dir as Direction, kind: b.kind as OccupantKind }),
+    (b): BeeSpec => ({
+      q: b.q,
+      r: b.r,
+      dir: b.dir as Direction,
+      kind: b.kind as OccupantKind,
+      color: (b as { color?: number }).color,
+    }),
   ),
   moveBudget: l.moveBudget,
   threeStarSpare: l.threeStarSpare,
   difficulty: l.difficulty,
   depDepth: l.depDepth,
   flooded: (l as { flooded?: boolean }).flooded ?? false,
+  // The campaign now plays by the sealed-rim rules: turning is free, the hive
+  // is a wall except at its doors. Carried per level rather than assumed, so a
+  // half-regenerated set can never be half-interpreted.
+  compass: (l as { compass?: boolean }).compass ?? false,
+  gates: ((l as { gates?: number[][] }).gates ?? []).map(
+    (g) => [g[0], g[1], g[2], g[3]] as readonly [number, number, number, number],
+  ),
 }))
 
 export { LEVELS }

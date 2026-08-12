@@ -3,7 +3,6 @@ import { GAME_WIDTH, colors, layout } from '../config/gameConfig'
 import { LEVEL_COUNT } from '../levels'
 import { themeForChapter, type ChapterTheme } from '../config/theme'
 import { purchaseService } from '../systems/PurchaseService'
-import { COMPASS_COUNT, COMPASS_READY } from '../levels/compass'
 import { saveManager } from '../systems/SaveManager'
 import { adService } from '../systems/AdService'
 import { paintBackground } from '../utils/background'
@@ -62,38 +61,9 @@ export class HomeScene extends Phaser.Scene {
       primary: false,
     })
 
-    // Compass Hive — the rotation mode's own ladder, unlocked at campaign L40
-    // (the mechanics assume a player who already reads honey and the queen).
-    // COMPASS_READY keeps the entry hidden entirely while the shipped ladder is
-    // still the placeholder, so a build can never offer a one-level mode.
-    const compassUnlocked = COMPASS_READY && saveManager.currentLevel > 40
-    // The unlock hint rides INSIDE the label. As a separate caption line it had
-    // nowhere to go: the button's bottom edge is at 792 and the settings pills
-    // start at 794, so the line landed on top of them.
-    // A "🔒 coming later" row for a mode the build does not contain is worse
-    // than silence — it promises content this binary cannot deliver.
-    if (COMPASS_READY) {
-      const compassBtn = makeButton(
-        this,
-        GAME_WIDTH / 2,
-        756,
-        compassUnlocked
-          ? `${t('home.compass')}  ·  ${t('home.compassProgress', { n: saveManager.compassLevel, total: COMPASS_COUNT })}`
-          : `🔒 ${t('home.compass')}  ·  ${t('home.compassLocked')}`,
-        () => {
-          if (compassUnlocked)
-            transitionTo(this, 'Game', { levelIndex: saveManager.compassLevel - 1, mode: 'compass' })
-        },
-        {
-          width: 484,
-          height: 72,
-          fontSize: compassUnlocked ? 24 : 21,
-          primary: false,
-          accent: 0x7fd6ff,
-        },
-      )
-      if (!compassUnlocked) compassBtn.setAlpha(0.55)
-    }
+    // No Compass Hive entry: its rules ARE the campaign now — sealed rim, free
+    // turning, doors instead of an open edge. A second door into the same game
+    // would only split progress across two save tracks.
 
     this.buildSettingsToggles()
     this.buildHowToCard()
