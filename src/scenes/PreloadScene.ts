@@ -75,9 +75,13 @@ const BEE_WORKER: BeePalette = {
 }
 
 /**
- * The same mark in rose. Kept ONLY so `beeQueen` still resolves while the queen
- * is being removed — delete this and its `makeBeeSheet` call together with the
- * queen, never one without the other (GameScene asks for the texture by name).
+ * The same mark in rose, for the queen.
+ *
+ * She is being removed from the NEW ladder's generator, but she is still in the
+ * shipped data — 39 of the 50 compass levels contain one, and every campaign
+ * slot carries a `hasQueen` field. Deleting this palette (or its `makeBeeSheet`
+ * call) before those levels are regenerated leaves GameScene asking for a
+ * texture key that does not exist. Retire her from the DATA first.
  */
 const BEE_QUEEN: BeePalette = {
   hi: '#fff2f7',
@@ -232,9 +236,13 @@ export class PreloadScene extends Phaser.Scene {
    * bezier curves, `globalAlpha` and composite modes, which is what buys the
    * plush gradient, the soft shadow and the translucent wings.
    *
-   * This is NOT a new texture path: `Graphics.generateTexture` already funnels
-   * through `textures.createCanvas()` and paints with the Canvas renderer. The
-   * only change is who holds the brush.
+   * This is very nearly the path Graphics already took: `generateTexture`
+   * funnels through `textures.createCanvas()` and paints with the Canvas
+   * renderer, so registration and upload are unchanged. ONE difference is
+   * deliberate — Graphics asks for `{ willReadFrequently: true }` and this does
+   * not, because the canvas is written once and uploaded, never read back. Do
+   * not "restore parity" by adding that flag: on WebKit it is the switch that
+   * moves the canvas to a software backing store.
    */
   private makeBeeSheet(key: string, pal: BeePalette): void {
     const W = 128 * BEE_FRAMES
@@ -255,11 +263,38 @@ export class PreloadScene extends Phaser.Scene {
     bctx.scale(BEE_SS, BEE_SS)
     for (let f = 0; f < BEE_FRAMES; f++) this.drawBee(bctx, f * 128, pal, BEE_WING_PHASE[f])
 
+    // Downscale by REPEATED HALVING, not one big drawImage.
+    //
+    // `imageSmoothingQuality = 'high'` is silently ignored on WebKit — the
+    // assignment is a no-op — so on the iOS 15 WebView this app actually ships
+    // to, a single 3x→1x drawImage falls back to bilinear and samples 4 of the
+    // 9 supersampled texels. That throws away most of the anti-aliasing the
+    // supersample exists to buy, and it would only ever have shown up on
+    // device: every render in the browser looks right.
+    //
+    // Halving steps are exact box filters under plain bilinear, so this needs
+    // no unsupported API and looks the same everywhere. (Same class of trap the
+    // file already avoids for `ctx.filter` further down.)
+    let srcCanvas: HTMLCanvasElement = buf
+    let w = buf.width
+    let h = buf.height
+    while (w > W * 2 && h > H * 2) {
+      const half = document.createElement('canvas')
+      half.width = Math.max(W, Math.round(w / 2))
+      half.height = Math.max(H, Math.round(h / 2))
+      const hctx = half.getContext('2d')
+      if (!hctx) break
+      hctx.imageSmoothingEnabled = true
+      hctx.drawImage(srcCanvas, 0, 0, half.width, half.height)
+      srcCanvas = half
+      w = half.width
+      h = half.height
+    }
+
     const ctx = tex.getContext()
     ctx.clearRect(0, 0, W, H)
     ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(buf, 0, 0, W, H)
+    ctx.drawImage(srcCanvas, 0, 0, W, H)
     // Under WebGL the canvas is only uploaded to the GPU when we say so.
     tex.refresh()
 
