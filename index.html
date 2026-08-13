@@ -59,7 +59,9 @@
   </head>
   <body>
     <div id="splash">
-      <video id="splash-video" src="./splash.mp4" muted playsinline autoplay preload="auto"></video>
+      <!-- No `muted` attribute: the sting is meant to be HEARD. The script
+           below falls back to muted wherever a browser refuses that. -->
+      <video id="splash-video" src="./splash.mp4" playsinline autoplay preload="auto"></video>
     </div>
     <div id="app"></div>
     <!--
@@ -135,8 +137,39 @@
           clearTimeout(cap)
           setTimeout(dismiss, (v.duration || 6) * 1000 + 1200)
         })
+        // SOUND. In the app this plays out loud: Capacitor's WKWebView sets
+        // `mediaTypesRequiringUserActionForPlayback = []`, so no media needs a
+        // gesture there. A desktop browser refuses unmuted autoplay outright, so
+        // a rejected play() retries MUTED rather than skipping the sting — the
+        // web build keeps its visuals, the app keeps its audio.
+        //
+        // It follows the SOUND switch, not Music: this is a one-off effect, not
+        // a bed. Read straight from the save because the sting runs before the
+        // game has booted and nothing else can answer the question yet.
+        var wantSound = true
+        try {
+          var raw = localStorage.getItem('beefree.save')
+          if (raw) {
+            var saved = JSON.parse(raw)
+            if (saved && saved.settings && saved.settings.sfx === false) wantSound = false
+          }
+        } catch (e) {
+          // Unreadable save — a first run, or storage denied. Sound stays on.
+        }
+        v.muted = !wantSound
+
         var p = v.play()
-        if (p && p.catch) p.catch(dismiss)
+        if (p && p.catch) {
+          p.catch(function () {
+            if (v.muted) {
+              dismiss()
+              return
+            }
+            v.muted = true
+            var muted = v.play()
+            if (muted && muted.catch) muted.catch(dismiss)
+          })
+        }
       })()
     </script>
     <script type="module" src="/src/main.ts"></script>

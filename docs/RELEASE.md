@@ -9,7 +9,7 @@ current state in [STATUS.md](STATUS.md).
 
 | | |
 |---|---|
-| Version / build | **1.1 / 34** — uploaded Aug 13 2026 (music + level-complete celebration). Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
+| Version / build | **1.1 / 35** — uploaded Aug 13 2026 (boot sting now plays with sound). Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
 | Bundle id | `com.beefree.hiveescape` |
 | Team | `YMN45WC2QR` (Automatic signing) |
 | Device family | Universal (`1,2`) |

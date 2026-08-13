@@ -47,11 +47,13 @@ test.describe('boot sting', () => {
     expect(box!.width).toBeGreaterThanOrEqual(view.width)
     expect(box!.height).toBeGreaterThanOrEqual(view.height)
 
-    // Muted + playsinline, so autoplay is allowed everywhere without a gesture
-    // — the same reason it works in the WKWebView. If the clip is ever swapped
-    // for one with an audio track, this is what fails.
-    const muted = await page.locator('#splash-video').evaluate((v: HTMLVideoElement) => v.muted)
-    expect(muted, 'an unmuted clip will not autoplay').toBe(true)
+    // The clip carries audio and is NOT muted in markup — in the app it plays
+    // out loud. Chromium refuses unmuted autoplay, so what this proves is the
+    // fallback: it must end up playing anyway rather than being skipped.
+    const hasAudio = await page
+      .locator('#splash-video')
+      .evaluate((v: HTMLVideoElement) => v.hasAttribute('muted'))
+    expect(hasAudio, 'the clip is muted in markup — the app would be silent').toBe(false)
 
     await page.waitForFunction(
       () => {
@@ -115,6 +117,21 @@ test.describe('boot sting', () => {
       () => JSON.parse(localStorage.getItem('beefree.save') || '{}')?.settings?.sfx,
     )
     expect(sfx, 'the skip tap toggled the Sound pill behind the sting').toBe(true)
+  })
+
+  test('stays silent when the player has Sound switched off', async ({ page }) => {
+    // The sting runs before the game boots, so it reads the setting straight
+    // out of the save. A player who muted the game must not be shouted at by
+    // the launch clip — and that is the one audio decision nothing else in the
+    // codebase is awake yet to make.
+    await page.addInitScript(
+      (save) => localStorage.setItem('beefree.save', JSON.stringify(save)),
+      { ...SAVE_WITH_SOUND_ON, settings: { sfx: false, music: true, haptics: true } },
+    )
+    await page.goto('/')
+    await page.waitForTimeout(600)
+    const muted = await page.locator('#splash-video').evaluate((v: HTMLVideoElement) => v.muted)
+    expect(muted, 'Sound is off but the sting still had audio').toBe(true)
   })
 
   test('signals the game while it owns the screen', async ({ page }) => {
