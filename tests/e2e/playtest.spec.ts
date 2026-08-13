@@ -142,7 +142,11 @@ async function rotateCell(page: Page, snap: BoardSnapshot, q: number, r: number)
   const y = box.y + (gy / GAME_H) * box.height
   await page.mouse.move(x, y)
   await page.mouse.down()
-  await page.waitForTimeout(80) // well under the launch threshold
+  // NO wait. Playwright's CDP round trip already adds ~120 ms between down and
+  // up, which is what the game measures — a `waitForTimeout(80)` here lands at
+  // 254 ms against a 260 ms launch threshold, i.e. a coin flip that turns a
+  // rotate into a flight and quietly loses the level. Measured: 0 ms of wait
+  // reads as ~120 ms, 20 ms reads as ~195 ms, 80 ms reads as ~254 ms.
   await page.mouse.up()
   await page.waitForTimeout(140)
 }

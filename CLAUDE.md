@@ -81,6 +81,17 @@ Three occupant kinds ([src/systems/occupants.ts](src/systems/occupants.ts)):
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The native launch screen is
   plain black to match its first frame.
 
+- **All audio is SYNTHESISED** — no sound files either. Effects in
+  [src/systems/AudioManager.ts](src/systems/AudioManager.ts), and the background
+  music in [src/systems/MusicManager.ts](src/systems/MusicManager.ts): a written
+  four-chord bed with motif-based melody that never repeats exactly, scheduled
+  with Web Audio look-ahead, on its own bus so it can duck under the win
+  fanfare. Sound / **Music** / Buzz are three independent toggles on Home.
+- **E2E press durations:** Playwright's CDP round trip adds ~120 ms between
+  `mouse.down` and `mouse.up`, and that is what the game measures. A "short
+  press" in a test must use **zero** wait (≈120 ms measured) — an 80 ms wait
+  reads as ≈254 ms against the 260 ms launch threshold and flips at random.
+
 ## Commands
 
 ```bash
@@ -191,7 +202,7 @@ with `Shop` reachable from Home/Menu. Full graph + per-scene detail in
 - **Capacitor 8 CLI needs Node ≥ 22** (`nvm use 22` before `npx cap sync ios`).
   The rest of the toolchain is fine on Node 21.
 - **Bump the iOS build number before every upload** — App Store Connect rejects a
-  duplicate. Currently at **v1.1, build 33** (the shipped 1.0's train is closed
+  duplicate. Currently at **v1.1, build 34** (the shipped 1.0's train is closed
   on ASC — new builds must ride 1.1+).
 - **Never point Playwright at `localhost:5173`.** Several games in this folder
   run Vite on the default port; `localhost` resolves to `::1` first on macOS and

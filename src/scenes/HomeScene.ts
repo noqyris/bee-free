@@ -256,10 +256,20 @@ export class HomeScene extends Phaser.Scene {
    */
   private buildSettingsToggles(): void {
     const y = 822
-    this.togglePill(GAME_WIDTH / 2 - 98, y, 'sound', t('settings.sound'), () => saveManager.get().settings.sfx, (v) =>
+    // Three across at 720 wide: 172 each with a 14px gap, 88px margins. Music
+    // is its own switch rather than riding on Sound — they are wanted
+    // independently (a bed of music with the phone's effects off is a normal
+    // preference, and so is the reverse), and one shared toggle makes the only
+    // way to silence the music also silence the game's feedback.
+    const dx = 186
+    this.togglePill(GAME_WIDTH / 2 - dx, y, 'sound', t('settings.sound'), () => saveManager.get().settings.sfx, (v) =>
       saveManager.updateSettings({ sfx: v }),
     )
-    this.togglePill(GAME_WIDTH / 2 + 98, y, 'vibe', t('settings.vibe'), () => saveManager.get().settings.haptics, (v) =>
+    this.togglePill(GAME_WIDTH / 2, y, 'music', t('settings.music'), () => saveManager.get().settings.music, (v) => {
+      saveManager.updateSettings({ music: v })
+      feedback.musicSettingChanged()
+    })
+    this.togglePill(GAME_WIDTH / 2 + dx, y, 'vibe', t('settings.vibe'), () => saveManager.get().settings.haptics, (v) =>
       saveManager.updateSettings({ haptics: v }),
     )
   }
@@ -267,12 +277,12 @@ export class HomeScene extends Phaser.Scene {
   private togglePill(
     x: number,
     y: number,
-    kind: 'sound' | 'vibe',
+    kind: 'sound' | 'music' | 'vibe',
     labelText: string,
     get: () => boolean,
     set: (v: boolean) => void,
   ): void {
-    const W = 184
+    const W = 172
     const H = 60
     const rad = H / 2
     const pill = this.add.container(x, y)
@@ -320,6 +330,14 @@ export class HomeScene extends Phaser.Scene {
           icon.beginPath(); icon.arc(6, 0, 6, -0.7, 0.7); icon.strokePath()
           icon.beginPath(); icon.arc(6, 0, 11, -0.7, 0.7); icon.strokePath()
         }
+      } else if (kind === 'music') {
+        // A beamed pair of eighth notes: two heads, two stems, one beam.
+        icon.fillStyle(ink, 1)
+        icon.fillEllipse(-8, 8, 11, 8)
+        icon.fillEllipse(9, 5, 11, 8)
+        icon.fillRect(-4, -12, 3, 21)
+        icon.fillRect(13, -14, 3, 20)
+        icon.fillRect(-4, -14, 20, 5)
       } else {
         icon.fillStyle(ink, 1)
         icon.fillRoundedRect(-7, -12, 14, 24, 3)

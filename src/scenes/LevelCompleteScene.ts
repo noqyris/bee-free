@@ -72,6 +72,31 @@ export class LevelCompleteScene extends Phaser.Scene {
     g.strokeRoundedRect(-280, -320, 560, 640, 36)
     panel.add(g)
 
+    // CONGRATULATIONS over the title: the panel's job is to say "you did it"
+    // before it says anything measurable, and "Hive Freed!" names the event
+    // without praising the player for it. Small caps above the big gold line,
+    // so it reads as a banner rather than a second headline.
+    const congrats = this.add
+      .text(0, -282, t('result.congrats'), {
+        fontFamily: FONT_STACK,
+        fontSize: '26px',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setAlpha(0)
+      .setScale(0.86)
+    panel.add(congrats)
+    this.tweens.add({
+      targets: congrats,
+      alpha: 1,
+      scale: 1,
+      duration: 340,
+      delay: 180,
+      ease: 'Back.easeOut',
+    })
+
     panel.add(
       this.add
         .text(0, -238, t('result.win'), {
@@ -83,6 +108,10 @@ export class LevelCompleteScene extends Phaser.Scene {
         })
         .setOrigin(0.5),
     )
+
+    // The fanfare lands WITH the panel, not with the last bee leaving — the
+    // board already played `win()` at that moment. Music ducks under it.
+    this.time.delayedCall(140, () => feedback.celebrate())
 
     // Star slots, then earned stars slam in one by one.
     const starXs = [-132, 0, 132]

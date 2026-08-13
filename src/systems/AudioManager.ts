@@ -55,6 +55,16 @@ class AudioManager {
     }
   }
 
+  /**
+   * The shared AudioContext, created on demand. Exposed for MusicManager, which
+   * needs its own gain bus on the SAME context — a second context would be a
+   * second hardware stream, and iOS is stingy with those.
+   */
+  context(): AudioContext | undefined {
+    this.ensure()
+    return this.ctx
+  }
+
   private ensure(): void {
     if (this.ctx) return
     const Ctor =
@@ -153,6 +163,58 @@ class AudioManager {
         cutoff: 4000,
         detune: 4,
         delayMs: i * 90,
+      })
+    })
+  }
+
+  /**
+   * The celebration on the level-complete screen — the biggest sound in the
+   * game, and the only one allowed to be. `win()` fires on the board the moment
+   * the last bee leaves; this lands with the panel, half a second later, so the
+   * two read as one arc rather than one event twice.
+   *
+   * A rising major run over a held triad, then a sparkle an octave up. Still
+   * sine/triangle through a low-pass — brighter and wider than the rest, never
+   * a brass hit.
+   */
+  celebrate(): void {
+    // Held triad underneath: the "chord" the run resolves into.
+    for (const s of [0, 4, 7]) {
+      this.blip({
+        freq: this.note(s, 261.63),
+        durMs: 1500,
+        type: 'sine',
+        gain: 0.12,
+        attackMs: 40,
+        cutoff: 1800,
+        detune: 5,
+      })
+    }
+    // The run: C major up over an octave and a half, quick and light.
+    const run = [0, 4, 7, 12, 16, 19, 24]
+    run.forEach((s, i) => {
+      this.blip({
+        freq: this.note(s, 523.25),
+        durMs: 420,
+        type: 'sine',
+        gain: 0.2,
+        attackMs: 4,
+        cutoff: 5200,
+        detune: 6,
+        delayMs: i * 70,
+      })
+    })
+    // Sparkle tail — three quick high notes after the run tops out.
+    ;[24, 28, 31].forEach((s, i) => {
+      this.blip({
+        freq: this.note(s, 523.25),
+        durMs: 260,
+        type: 'triangle',
+        gain: 0.1,
+        attackMs: 3,
+        cutoff: 7000,
+        detune: 8,
+        delayMs: 520 + i * 110,
       })
     })
   }

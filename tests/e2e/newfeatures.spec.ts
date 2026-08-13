@@ -89,7 +89,7 @@ async function tapGame(page: Page, gx: number, gy: number, holdMs = 60): Promise
   const y = box.y + (gy / GAME_H) * box.height
   await page.mouse.move(x, y)
   await page.mouse.down()
-  await page.waitForTimeout(holdMs)
+  if (holdMs > 0) await page.waitForTimeout(holdMs)
   await page.mouse.up()
   await page.waitForTimeout(420)
 }
@@ -128,12 +128,15 @@ async function aimAndFly(page: Page, q: number, r: number): Promise<boolean> {
       await tapCell(page, snap, q, r)
       return true
     }
-    // Short press = turn.
+    // Short press = turn. ZERO wait: Playwright's own round trip already puts
+    // ~120 ms between down and up, and that is what the game measures. An 80 ms
+    // wait here reads as ~254 ms against a 260 ms threshold — a coin flip that
+    // launches the bee instead of turning it.
     await tapGame(
       page,
       snap.origin.x + snap.cellSize * SQRT3 * (q + r / 2),
       snap.origin.y + snap.cellSize * 1.5 * r,
-      80,
+      0,
     )
   }
   return false
@@ -218,6 +221,41 @@ test.describe('daily gift', () => {
     await page.waitForTimeout(300)
     const again = readSave(await page.evaluate(() => localStorage.getItem('beefree.save')))
     expect(again.honey, 'no double-claim on the same day').toBe(220)
+  })
+})
+
+test.describe('settings toggles', () => {
+  test('Music is its own switch and survives a reload', async ({ page }) => {
+    // Three pills now sit at y=822: Sound (-186), Music (centre), Buzz (+186).
+    // Music must not be wired to Sound — a player who wants the bed off usually
+    // still wants the game's own feedback.
+    // Seed ONCE. addInitScript re-runs on every navigation, so the usual
+    // unconditional seed would restore the starting save on the reload below
+    // and the persistence half of this test would be checking nothing.
+    await page.addInitScript((save) => {
+      if (!localStorage.getItem('beefree.save')) {
+        localStorage.setItem('beefree.save', JSON.stringify(save))
+      }
+    }, SEEDED_SAVE)
+    await page.goto('/')
+    await waitForGame(page)
+
+    await tapGame(page, GAME_W / 2, 822)
+    await page.waitForTimeout(300)
+    let save = readSave(await page.evaluate(() => localStorage.getItem('beefree.save')))
+    expect(save.settings.music, 'Music did not toggle off').toBe(false)
+    expect(save.settings.sfx, 'Music dragged Sound with it').toBe(true)
+    expect(save.settings.haptics, 'Music dragged Buzz with it').toBe(true)
+
+    await page.goto('/')
+    await waitForGame(page)
+    save = readSave(await page.evaluate(() => localStorage.getItem('beefree.save')))
+    expect(save.settings.music, 'the choice did not survive a reload').toBe(false)
+
+    await tapGame(page, GAME_W / 2, 822)
+    await page.waitForTimeout(300)
+    save = readSave(await page.evaluate(() => localStorage.getItem('beefree.save')))
+    expect(save.settings.music, 'Music would not come back on').toBe(true)
   })
 })
 
