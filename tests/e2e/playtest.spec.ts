@@ -28,10 +28,22 @@ interface BoardSnapshot {
 }
 
 async function waitForGame(page: Page): Promise<void> {
+  await dismissSplash(page)
   await page.waitForFunction(() => {
     const g = (window as any).__game
     return !!g && g.scene.getScenes(true).length > 0
   }, null, { timeout: 30_000 })
+}
+
+/**
+ * The studio sting covers the canvas for its ~5 s and eats the first pointer
+ * event as a skip. Every test drives real pointer events at the canvas, so it
+ * has to be gone first — otherwise the opening tap of each test is spent
+ * dismissing it.
+ */
+async function dismissSplash(page: Page): Promise<void> {
+  await page.evaluate(() => (window as any).__dismissSplash?.())
+  await page.waitForFunction(() => !document.getElementById('splash'), null, { timeout: 10_000 })
 }
 
 /** Name of the top-most active scene. */

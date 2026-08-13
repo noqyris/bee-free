@@ -13,14 +13,18 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:5173',
+    // 127.0.0.1 and a port of our own, NOT localhost:5173. Several games in this
+    // folder run Vite on the default port; `localhost` resolves to ::1 first on
+    // macOS, and `reuseExistingServer` then happily adopts whichever project got
+    // there first — the tests go green or red against somebody else's game.
+    baseURL: 'http://127.0.0.1:5273',
     viewport: { width: 900, height: 1400 },
     trace: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'npm run dev -- --port 5173 --strictPort',
-    url: 'http://localhost:5173',
+    command: 'npm run dev -- --host 127.0.0.1 --port 5273 --strictPort',
+    url: 'http://127.0.0.1:5273',
     reuseExistingServer: true,
     timeout: 60_000,
   },

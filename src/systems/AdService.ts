@@ -8,6 +8,7 @@ import {
 import { ADS, USE_TEST_ADS, TEST_IOS, LIVE_IOS } from '../config/monetization'
 import { isSandboxBuild } from './appEnv'
 import { saveManager } from './SaveManager'
+import { splashDone } from './bootSplash'
 
 /**
  * AdMob wrapper (spec §10). Two rules drive everything here:
@@ -67,6 +68,10 @@ class AdService {
   }
 
   private async runInit(): Promise<void> {
+    // Nothing ad-related while the boot sting is on screen. The consent form and
+    // the ATT prompt are SYSTEM dialogs over the web view — they would land on
+    // top of the studio clip, on a player who has not seen the game yet.
+    await splashDone
     // TestFlight/sandbox → Google TEST ads; App Store → LIVE ads. One binary.
     this.testing = USE_TEST_ADS || (await isSandboxBuild())
     this.adUnits = this.testing ? TEST_IOS : LIVE_IOS
@@ -156,6 +161,11 @@ class AdService {
   async showBanner(): Promise<void> {
     if (!this.enabled || !ADS.bannerDuringPlay || !this.adUnits.banner) return
     if (this.bannerShown) return
+    // Stated here as well as in runInit, because this is the one that shows.
+    // The banner is a NATIVE bar over the web view: it does not care what the
+    // page is drawing and would sit across the bottom of the studio clip.
+    // HomeScene asks for it ~130 ms into a boot the sting owns for ~5 s.
+    await splashDone
     await this.init() // idempotent; resolves once consent + ATT + SDK are done
     if (!this.enabled) return // a purchase may have landed while we waited
     this.bannerShown = true // set first: guards against a double show while awaiting

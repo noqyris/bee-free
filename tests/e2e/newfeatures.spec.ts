@@ -24,6 +24,9 @@ interface Snap {
 }
 
 async function waitForGame(page: Page): Promise<void> {
+  // The studio sting covers the canvas and would eat each test's first tap.
+  await page.evaluate(() => (window as any).__dismissSplash?.())
+  await page.waitForFunction(() => !document.getElementById('splash'), null, { timeout: 10_000 })
   await page.waitForFunction(() => {
     const g = (window as any).__game
     return !!g && g.scene.getScenes(true).some((s: any) => s.scene.key === 'Home')

@@ -70,8 +70,16 @@ Three occupant kinds ([src/systems/occupants.ts](src/systems/occupants.ts)):
 - Native plugins: `@capacitor-community/admob` (ads), `@capacitor/haptics`,
   `@capacitor/preferences`, `@capawesome/capacitor-app-review`, plus a **custom
   StoreKit 2 bridge** written in Swift ([ios/App/App/StoreKitBridgePlugin.swift](ios/App/App/StoreKitBridgePlugin.swift)) — no third-party purchase SDK.
-- No art binaries except `logo.png`: **all textures are drawn procedurally at
-  boot** in [src/scenes/PreloadScene.ts](src/scenes/PreloadScene.ts).
+- No art binaries except `logo.png` and the boot clip `public/splash.mp4`:
+  **all textures are drawn procedurally at boot** in
+  [src/scenes/PreloadScene.ts](src/scenes/PreloadScene.ts).
+- **The studio sting** (noqyris) plays from an inline script in
+  [index.html](index.html), before Phaser is fetched, so it covers the boot
+  rather than adding to it. It is skippable, can never strand the player, and
+  nothing native (banner / consent / ATT) draws while it is up — see
+  [src/systems/bootSplash.ts](src/systems/bootSplash.ts) and the boot section of
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The native launch screen is
+  plain black to match its first frame.
 
 ## Commands
 
@@ -183,8 +191,13 @@ with `Shop` reachable from Home/Menu. Full graph + per-scene detail in
 - **Capacitor 8 CLI needs Node ≥ 22** (`nvm use 22` before `npx cap sync ios`).
   The rest of the toolchain is fine on Node 21.
 - **Bump the iOS build number before every upload** — App Store Connect rejects a
-  duplicate. Currently at **v1.1, build 25** (the shipped 1.0's train is closed
+  duplicate. Currently at **v1.1, build 32** (the shipped 1.0's train is closed
   on ASC — new builds must ride 1.1+).
+- **Never point Playwright at `localhost:5173`.** Several games in this folder
+  run Vite on the default port; `localhost` resolves to `::1` first on macOS and
+  `reuseExistingServer` then adopts whichever project got there first, so the
+  suite passes or fails against *another game*. The config is pinned to
+  `127.0.0.1:5273`.
 - **iPad orientation must list all four** in Info.plist or Apple rejects the
   portrait-only app (error 90474). iPhone stays portrait-locked.
 - **The AdMob banner is a native bar over the web view** — it ignores canvas

@@ -32,6 +32,20 @@ generator, **and** the solver — see [../CLAUDE.md](../CLAUDE.md) "the one rule
 `main.ts` constructs the `Phaser.Game` with the scene list and FIT scaling. In
 dev only, it exposes `window.__game` for the Playwright harness.
 
+0. **The studio sting** — a ~5 s clip (`public/splash.mp4`) played by a plain
+   inline script in [../index.html](../index.html), i.e. **before Phaser is even
+   fetched**, so it covers the whole boot instead of adding to it. It is not a
+   scene and knows nothing about the game. Three properties matter:
+   - **It can never strand anyone.** A decode error, a refused autoplay or a
+     clip that never fires `ended` all dismiss it; there is a duration-derived
+     backstop on top. Reduced motion skips it outright.
+   - **It swallows the whole gesture.** The overlay keeps eating pointer events
+     through its fade-out and is only then removed — Home's pills fire on
+     `pointerup`, and Phaser listens for `pointerup` on `window`, so a skip tap
+     that only ate the press would toggle whatever sat underneath.
+   - **Nothing native draws over it.** The banner, the consent form and the ATT
+     prompt are native views over the web view; `AdService` awaits
+     [`splashDone`](../src/systems/bootSplash.ts) before any of them.
 1. **BootScene** (`'Boot'`) — no UI. `saveManager.load()` (must run before any
    scene reads progress), then fire-and-forget `purchaseService.init()` →
    `adService.init()` (purchases first so a restored "remove ads" entitlement

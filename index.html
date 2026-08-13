@@ -30,10 +30,115 @@
       canvas {
         display: block;
       }
+      /* The studio sting. Opaque black over everything, including the letterbox
+         the canvas leaves, so the boot never shows through it. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: #000;
+        transition: opacity 380ms ease-out;
+      }
+      /* No `pointer-events: none` here on purpose. The overlay keeps eating
+         input for the whole fade and is only then removed, so the press that
+         skips the sting cannot land its RELEASE on the Home screen behind it —
+         Home's pills fire on pointerup. */
+      #splash.gone {
+        opacity: 0;
+      }
+      #splash video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        /* cover, never contain: the clip is 9:16.4 and phones are taller still,
+           so contain would letterbox. The wordmark sits inside the middle 65%
+           of the frame, which survives the side crop on the tallest phone. */
+        object-fit: cover;
+      }
     </style>
   </head>
   <body>
+    <div id="splash">
+      <video id="splash-video" src="./splash.mp4" muted playsinline autoplay preload="auto"></video>
+    </div>
     <div id="app"></div>
+    <!--
+      Deliberately a plain inline script, not part of the module bundle: it runs
+      before Phaser is even fetched, so the sting is already playing while the
+      ~1.8 MB of engine parses behind it. The one hard rule here is that NOTHING
+      may leave the splash on screen — every failure path (decode error, refused
+      autoplay, a clip that never fires `ended`) dismisses it.
+    -->
+    <script>
+      ;(function () {
+        var el = document.getElementById('splash')
+        var v = document.getElementById('splash-video')
+        var done = false
+        // Read by src/systems/bootSplash.ts. Set BEFORE anything can dismiss,
+        // and the module bundle is deferred, so the game always sees it.
+        window.__splashActive = true
+        function finished() {
+          window.__splashActive = false
+          window.dispatchEvent(new Event('beefree:splashdone'))
+        }
+        function dismiss() {
+          if (done) return
+          done = true
+          el.classList.add('gone')
+          setTimeout(function () {
+            // Stop decoding and drop the node: a paused video parked over the
+            // canvas would keep swallowing taps at zero opacity.
+            try {
+              v.pause()
+              v.removeAttribute('src')
+              v.load()
+            } catch (e) {}
+            el.remove()
+            finished()
+          }, 450)
+        }
+        // Reduced motion means straight into the game, no sting at all.
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          el.remove()
+          finished()
+          return
+        }
+        // Tap to skip, armed after 400 ms so the finger that launched the app
+        // cannot dismiss the sting before it is seen.
+        var armed = false
+        setTimeout(function () {
+          armed = true
+        }, 400)
+        // Swallow the WHOLE gesture, not just the press. Phaser also listens on
+        // `window` for pointerup, and Home's pills fire on pointerup — without
+        // stopPropagation the release of a skip tap would toggle whatever sits
+        // under the finger. Bubble-phase is enough to keep it off `window`.
+        ;['pointerdown', 'pointerup', 'click', 'touchstart', 'touchend', 'mousedown', 'mouseup'].forEach(
+          function (type) {
+            el.addEventListener(
+              type,
+              function (e) {
+                e.stopPropagation()
+                if (e.cancelable) e.preventDefault()
+                if (type === 'pointerdown' && armed) dismiss()
+              },
+              { passive: false },
+            )
+          },
+        )
+        v.addEventListener('ended', dismiss)
+        v.addEventListener('error', dismiss)
+        // Backstop in case `ended` never arrives. Tightened to the real length
+        // once the metadata says what it is.
+        var cap = setTimeout(dismiss, 9000)
+        v.addEventListener('loadedmetadata', function () {
+          clearTimeout(cap)
+          setTimeout(dismiss, (v.duration || 6) * 1000 + 1200)
+        })
+        var p = v.play()
+        if (p && p.catch) p.catch(dismiss)
+      })()
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
