@@ -9,7 +9,7 @@ current state in [STATUS.md](STATUS.md).
 
 | | |
 |---|---|
-| Version / build | **1.1 / 32** — uploaded Aug 13 2026 (adds the studio sting on boot). Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
+| Version / build | **1.1 / 33** — uploaded Aug 13 2026 (studio sting on boot + turn-vs-launch decided from the gesture). Bump before the next upload; the 1.0 train is CLOSED on ASC, so new builds must ride 1.1+ |
 | Bundle id | `com.beefree.hiveescape` |
 | Team | `YMN45WC2QR` (Automatic signing) |
 | Device family | Universal (`1,2`) |
