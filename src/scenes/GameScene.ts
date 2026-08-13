@@ -1303,7 +1303,17 @@ export class GameScene extends Phaser.Scene {
       // committing are the two verbs of the mode, and putting them on the same
       // finger — one gesture, two durations — is what lets a bee be turned
       // several times and then sent without ever moving the hand.
-      if (!this.launchArmed) {
+      //
+      // Decided from the gesture's OWN timestamps, not from whether the arming
+      // timer got to run. Both come off the DOM events, so they say when the
+      // finger actually moved. `launchArmed` only says whether a scene timer
+      // fired first: stall the loop for 300 ms and a 80 ms tap is delivered
+      // AFTER the 260 ms timer, launching a bee the player meant to turn — a
+      // spent move in a game where the budget is the whole difficulty dial.
+      // The timer stays: it is what makes the threshold visible and felt.
+      const heldMs = pointer.upTime - pointer.downTime
+      const longPress = heldMs > 0 ? heldMs >= LAUNCH_HOLD_MS : this.launchArmed
+      if (!longPress) {
         this.rotatePending(pending)
         return
       }
